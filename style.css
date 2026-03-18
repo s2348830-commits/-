@@ -1,0 +1,379 @@
+body {
+    margin: 0;
+    background-color: #111;
+    color: white;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    user-select: none; /* スマホタップ時のハイライト防止 */
+}
+
+/* 上部スクロールテキスト */
+#marquee-container {
+    background-color: rgba(0, 0, 0, 0.7);
+    width: 100%;
+    height: 30px;
+    overflow: hidden;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+}
+
+#marquee-text {
+    display: flex;
+    white-space: nowrap;
+    animation: scrollText 15s linear infinite;
+    color: white;
+    font-weight: bold;
+}
+
+#marquee-text span {
+    margin-right: 50px;
+}
+
+@keyframes scrollText {
+    0% { transform: translateX(100vw); }
+    100% { transform: translateX(-100%); }
+}
+
+/* メインコンテナ */
+#game-container {
+    margin-top: 30px; /* スクロール枠の分下げる */
+    padding: 10px;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* ヘッダー */
+header {
+    display: flex;
+    justify-content: space-between; /* 左右に分割 */
+    align-items: center;
+    background: linear-gradient(to right, #800000, #400000);
+    padding: 10px 20px;
+    border: 2px solid gold;
+    border-radius: 5px;
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 20px; /* タイマーと会場名の隙間 */
+}
+.timer-box { color: #ffeb3b; }
+.venue-title {
+    color: white; 
+    text-shadow: 2px 2px 2px black; 
+}
+.user-fp-display {
+    background-color: rgba(0, 0, 0, 0.6);
+    padding: 5px 15px;
+    border-radius: 20px;
+    border: 2px solid #ffcc00;
+    font-size: 20px;
+    color: #ffcc00;
+}
+
+/* メインコンテンツ配置 */
+.main-content {
+    display: flex;
+    gap: 10px;
+    height: 60vh;
+}
+
+/* オッズ表 */
+.odds-table {
+    flex: 2;
+    background-color: #eee;
+    color: black;
+    border: 3px solid #ffcc00;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* --- 追加：組み合わせベット用レイアウト --- */
+.col-combo-num { width: 40%; display: flex; justify-content: center; align-items: center; gap: 5px; font-weight: bold; }
+.col-combo-odds { width: 30%; font-size: 18px; color: #d4145a; font-weight: bold; }
+.col-combo-action { width: 30%; height: 100%; }
+
+.car-box {
+    width: 25px; height: 25px; display: flex; justify-content: center; align-items: center;
+    border: 1px solid black; border-radius: 3px; font-size: 14px;
+}
+.combo-hyphen { color: black; }
+
+/* 転がし用プレースホルダー */
+.rollover-placeholder {
+    padding: 30px; text-align: center; color: black; font-size: 20px; font-weight: bold;
+}
+
+.table-header, .table-row {
+    display: flex;
+    text-align: center;
+    border-bottom: 1px solid #ccc;
+    align-items: center;
+}
+
+.table-header {
+    background-color: #555;
+    color: white;
+    font-weight: bold;
+    padding: 5px 0;
+}
+
+.table-row { height: 40px; }
+
+/* カラム幅 */
+.col-num { width: 5%; font-weight: bold; }
+.col-name { width: 30%; text-align: left; padding-left: 5px; }
+.col-cond { width: 10%; }
+.col-pop { width: 15%; }
+.col-win, .col-place { width: 20%; cursor: pointer; }
+
+/* ボタン風デザイン（オッズタップ部分） */
+/* ボタンのレイアウト修正（数字とオッズの配置） */
+.bet-btn {
+    background-color: black;
+    color: #00ff00; /* 賭けてない時は緑文字 */
+    border: 1px solid #777;
+    height: 100%;
+    display: flex;
+    flex-direction: column; /* 縦並び */
+    justify-content: space-between;
+    padding: 2px 5px;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+.bet-btn:active { background-color: #333; }
+
+/* 賭けた時のデザイン（背景を黄色、文字を黒に） */
+.bet-btn.betted {
+    background-color: #ffcc00; /* 黄色 */
+    color: black; /* 黒文字 */
+    border: 2px solid #ff9900;
+    font-weight: bold;
+}
+
+/* 右上の数字（金額） */
+.bet-amount {
+    font-size: 14px;
+    text-align: right;
+    min-height: 16px; /* 空でも高さを保つ */
+}
+/* 中央のオッズ */
+.bet-odds {
+    font-size: 16px;
+    text-align: center;
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
+/* --- 独自のBET一覧UI（アーケード風ポップアップ） --- */
+#bet-modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.8); z-index: 200;
+    display: flex; justify-content: center; align-items: center;
+}
+.bet-modal-content {
+    background: #222; border: 3px solid #ffcc00; border-radius: 10px;
+    width: 90%; max-width: 400px; color: white; display: flex; flex-direction: column;
+}
+.bet-modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 15px; background: linear-gradient(to right, #800000, #400000);
+    border-bottom: 2px solid gold; border-radius: 7px 7px 0 0;
+}
+.bet-modal-header h2 { margin: 0; font-size: 20px; }
+#close-modal-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+#bet-modal-list { padding: 15px; max-height: 300px; overflow-y: auto; font-size: 18px; }
+.modal-list-item {
+    display: flex; justify-content: space-between;
+    border-bottom: 1px solid #444; padding: 8px 0;
+}
+.bet-modal-footer {
+    padding: 15px; background: #111; border-top: 1px solid #555;
+    border-radius: 0 0 7px 7px; display: flex; justify-content: space-between;
+    font-size: 20px; font-weight: bold; color: #ffcc00;
+}
+
+.bg-white { background-color: white; color: black; border: 1px solid black; }
+.bg-black { background-color: black; color: white; border: 1px solid white; }
+
+/* 右側映像エリア */
+.video-area {
+    flex: 1.5;
+    background-color: #222;
+    border: 3px solid #ffcc00;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* サイドメニュー */
+.side-menu {
+    flex: 0.5;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.menu-btn {
+    flex: 1;
+    background: linear-gradient(to bottom, #d4145a, #8e0038);
+    color: white;
+    border: 2px solid white;
+    border-radius: 5px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+}
+.menu-btn.active { background: linear-gradient(to bottom, #ffeb3b, #fbc02d); color: black; }
+
+/* 下部パネル */
+.bottom-panel {
+    display: flex;
+    justify-content: space-between;
+    background-color: #333;
+    padding: 15px;
+    margin-top: 10px;
+    border: 2px solid #666;
+}
+
+.bet-unit-control, .bet-actions {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    font-size: 18px;
+}
+
+select, button {
+    padding: 5px 15px;
+    font-size: 18px;
+    cursor: pointer;
+}
+/* =========================================
+   スマホ・タブレット対応（レスポンシブ）
+   画面幅が768px以下の場合に適用されます
+   ========================================= */
+@media screen and (max-width: 768px) {
+    /* 1. ヘッダーの縦積みと文字サイズ調整 */
+    header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        font-size: 16px;
+        padding: 10px;
+    }
+    .header-left {
+        justify-content: space-between;
+    }
+    .user-fp-display {
+        font-size: 16px;
+        text-align: center;
+        display: block;
+    }
+
+    /* 2. メインコンテンツを縦積みに変更 */
+    .main-content {
+        flex-direction: column;
+        height: auto; /* PCの高さ固定を解除 */
+    }
+
+    /* 3. 映像エリアを一番上に持ってくる */
+    .video-area {
+        order: -1; /* flexboxの順序を一番最初にする */
+        width: 100%;
+        height: 250px; /* スマホで見やすい高さ */
+    }
+
+    /* 4. サイドメニュー（賭け式）を横並びのボタン群に */
+    .side-menu {
+        flex-direction: row;
+        flex-wrap: wrap; /* 画面端で折り返す */
+    }
+    .menu-btn {
+        flex: 1 1 20%; /* 4〜5個ずつ並べる */
+        font-size: 14px;
+        padding: 8px 2px;
+    }
+
+    /* 5. オッズ表の縮みすぎ防止と横スクロール */
+    .odds-table {
+        overflow-x: auto; /* はみ出した部分は横にスワイプ可能にする */
+        font-size: 14px;
+    }
+    /* テーブル全体の最低幅をキープして文字潰れを防ぐ */
+    .table-header, .table-row {
+        min-width: 600px; 
+    }
+
+    /* 6. 下部パネルの縦積み */
+    .bottom-panel {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    .bet-unit-control, .bet-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+#bet-modal-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 200;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.bet-modal-content {
+    background: #222;
+    border: 3px solid #ffcc00;
+    border-radius: 10px;
+    width: 90%;
+    max-width: 400px;
+    color: white;
+    display: flex;
+    flex-direction: column;
+}
+.bet-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: linear-gradient(to right, #800000, #400000);
+    border-bottom: 2px solid gold;
+    border-radius: 7px 7px 0 0;
+}
+.bet-modal-header h2 { margin: 0; font-size: 20px; }
+#close-modal-btn {
+    background: none; border: none; color: white; font-size: 24px; cursor: pointer;
+}
+#bet-modal-list {
+    padding: 15px;
+    max-height: 300px;
+    overflow-y: auto;
+    font-size: 18px;
+}
+.modal-list-item {
+    display: flex; justify-content: space-between;
+    border-bottom: 1px solid #444; padding: 8px 0;
+}
+.bet-modal-footer {
+    padding: 15px;
+    background: #111;
+    border-top: 1px solid #555;
+    border-radius: 0 0 7px 7px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 20px; font-weight: bold; color: #ffcc00;
+}
