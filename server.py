@@ -155,6 +155,10 @@ async def handler(websocket):
                 u_id, g_id = str(data["user_id"]), str(data.get("guild_id", "DM"))
                 # ボットのID形式「サーバーID_ユーザーID」を生成
                 client_doc_id = f"{g_id}_{u_id}"
+                
+                # ★追加: WebSocket接続オブジェクト自体にIDを記録しておく（後で一括配信時に使うため）
+                websocket.doc_id = client_doc_id  
+                
                 user_fp = 10000
                 
                 if MONGO_URL:
@@ -223,6 +227,8 @@ async def handler(websocket):
 async def timer_loop():
     global race_timer, race_state, current_cars_data, race_count
     while True:
+        state_changed_to_result = False # 結果発表に切り替わったかどうかのフラグ
+        
         if race_timer > 0:
             race_timer -= 1
         else:
@@ -231,17 +237,37 @@ async def timer_loop():
             elif race_state == "racing":
                 race_state, race_timer = "result", 10
                 process_race_results()
+                state_changed_to_result = True # ★配当処理が終わった合図
             elif race_state == "result":
                 race_state, race_timer, race_count, current_cars_data = "betting", 600, race_count + 1, generate_race_data()
         
         if connected_clients:
-            msg = json.dumps({
-                "type": "sync", "state": race_state, "timer": f"{race_timer // 60:02d}:{race_timer % 60:02d}", 
-                "video_time": 35 - race_timer if race_state == "racing" else 0, 
-                "weather": current_weather, "cars_data": current_cars_data, 
-                "race_count": race_count, "venue": current_venue, "distance": current_distance
-            })
-            websockets.broadcast(connected_clients, msg)
+            if state_changed_to_result:
+                # 結果発表のタイミングだけ、各プレイヤーの最新FPをDBから取得して個別に送る
+                for ws in connected_clients:
+                    try:
+                        msg_dict = {
+                            "type": "sync", "state": race_state, "timer": f"{race_timer // 60:02d}:{race_timer % 60:02d}", 
+                            "video_time": 0, "weather": current_weather, "cars_data": current_cars_data, 
+                            "race_count": race_count, "venue": current_venue, "distance": current_distance
+                        }
+                        if hasattr(ws, 'doc_id') and MONGO_URL:
+                            user_doc = users_col.find_one({"_id": ws.doc_id})
+                            if user_doc:
+                                msg_dict["fp"] = user_doc.get("fp", 0)
+                        await ws.send(json.dumps(msg_dict))
+                    except Exception:
+                        pass
+            else:
+                # 通常のカウントダウンは全員に一斉送信
+                msg = json.dumps({
+                    "type": "sync", "state": race_state, "timer": f"{race_timer // 60:02d}:{race_timer % 60:02d}", 
+                    "video_time": 35 - race_timer if race_state == "racing" else 0, 
+                    "weather": current_weather, "cars_data": current_cars_data, 
+                    "race_count": race_count, "venue": current_venue, "distance": current_distance
+                })
+                websockets.broadcast(connected_clients, msg)
+                
         await asyncio.sleep(1)
 
 def health_check(arg1, arg2):
