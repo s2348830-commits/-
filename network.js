@@ -1,7 +1,15 @@
 import { DiscordSDK } from "@discord/embedded-app-sdk";
+
 // ▼ あなたのDiscordアプリの Client ID を入力してください
 const CLIENT_ID = "1457823497937096836"; 
-const discordSdk = new DiscordSDK(CLIENT_ID);
+
+let discordSdk = null; // constからletに変更し、最初はnullにしておく
+
+// URLにframe_idがあるか（Discord内かどうか）をチェック
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.has('frame_id')) {
+    discordSdk = new DiscordSDK(CLIENT_ID);
+}
 
 let socket = null;
 let currentUserId = null;
@@ -13,6 +21,9 @@ async function setupDiscordAndSocket() {
     console.log("Discord SDKの準備を開始します...");
     
     try {
+        // SDKが初期化されていない（普通のブラウザで開いた）場合はわざとエラーを投げて下のcatch（ローカルモード）へ流す
+        if (!discordSdk) throw new Error("Discord環境ではありません。ローカルモードで起動します。");
+
         // 1. SDKの準備完了を待つ
         await discordSdk.ready();
         console.log("Discord SDK ready.");
@@ -45,7 +56,14 @@ async function setupDiscordAndSocket() {
  * WebSocket接続の確立とメッセージハンドリング
  */
 function connectWebSocket(authCode) {
-    const WS_URL = "wss://race-game-8x0a.onrender.com";
+    // Discord内かどうかを判定
+    const isDiscord = new URLSearchParams(window.location.search).has('frame_id');
+    
+    // Discord内なら中継URL（/api）、外なら直接Renderに繋ぐ
+    const WS_URL = isDiscord 
+        ? `wss://${location.host}/api` 
+        : "wss://race-game-8x0a.onrender.com";
+
     socket = new WebSocket(WS_URL);
 
     socket.onopen = () => {
@@ -81,12 +99,16 @@ function connectWebSocket(authCode) {
 
                 // ここでようやく「本物のDiscordユーザーID」が手に入る
                 currentUserId = authResult.user.id;
-                console.log("Discordログイン完了！ ユーザー:", authResult.user.username, `(ID: ${currentUserId})`);
+                const urlParams = new URLSearchParams(window.location.search);
+                const guildId = urlParams.get('guild_id') || 'DM';
+
+                console.log("Discordログイン完了！ ユーザー:", authResult.user.username, `(ID: ${currentUserId}, Guild: ${guildId})`);
 
                 // ゲームのログイン処理へ進む
                 socket.send(JSON.stringify({
                     action: "login",
-                    user_id: currentUserId
+                    user_id: currentUserId,
+                    guild_id: guildId
                 }));
             } catch (err) {
                 console.error("SDK authenticate error:", err);

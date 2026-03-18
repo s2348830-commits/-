@@ -29,7 +29,7 @@ if MONGO_URL:
     try:
         mongo_client = pymongo.MongoClient(MONGO_URL)
         db = mongo_client["race_game_db"] # データベース名
-        users_col = db["users"]           # ユーザー情報を入れるコレクション(テーブル)
+        users_col = db["discord_users"]          # ユーザー情報を入れるコレクション(テーブル)
         print("✅ MongoDBへの接続に成功しました！")
     except Exception as e:
         print(f"❌ MongoDB接続エラー: {e}")
@@ -216,18 +216,26 @@ async def handler(websocket):
 
             elif data["action"] == "login":
                 user_id = data["user_id"]
+                guild_id = str(data.get("guild_id", "DM"))
                 
+                doc_id = f"{guild_id}_{user_id}"
                 # ▼ 修正: DBからユーザーを探す、いなければ作る
                 user_fp = 0
                 if MONGO_URL:
                     user_doc = users_col.find_one({"_id": user_id})
                     if not user_doc:
-                        users_col.insert_one({"_id": user_id, "fp": 10000})
+                        # 新規登録（ボットと同じ形式で10000FP付与）
                         user_fp = 10000
-                        print(f"🔰 DBに新規登録: {user_id} に10000FPを付与しました")
+                        users_col.insert_one({
+                            "_id": doc_id, 
+                            "fp": user_fp,
+                            "guild_id": guild_id,
+                            "user_id": user_id
+                        })
                     else:
+                        # 既存ユーザー（ボットが持っているFPを取得）
                         user_fp = user_doc.get("fp", 0)
-                        print(f"🍀 既存ユーザーのFPを同期: {user_id} -> {user_fp}FP")
+                        print(f"💰 ボット同期成功: {doc_id} -> {user_fp}FP")
 
                 video_time = 35 - race_timer if race_state == "racing" else 0
 
