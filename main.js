@@ -70,7 +70,7 @@ function generateRolloverTable() {
     const currentFp = parseInt(currentFpText.replace(/,/g, ''), 10) || 0;
 
     // 10000FP未満の場合は警告UIのみを表示
-    if (currentFp < 10000) {
+    if (currentFp < 1000) {
         return `
             <div style="padding: 20px; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; box-sizing: border-box;">
                 <h2 style="color: #ffcc00; margin-top: 0; margin-bottom: 20px;">🔄 転がし</h2>
