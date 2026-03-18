@@ -33,15 +33,15 @@ function updateMarquee(data, weather, raceCount, venue, distance) {
         // 人気順（1番人気〜5番人気）に並び替える
         let popSorted = [...data].sort((a, b) => a.pop - b.pop);
         
-        // ご要望のフォーマットで文字列を生成
+        // ご要望のフォーマット（名前、倍率、調子）で文字列を生成
         let popListStr = popSorted.map(c => 
-            `${c.pop}番人気: ${c.num}番 倍率: ${c.winOdds} 調子: ${c.cond}`
+            `${c.pop}番人気: ${c.name} 倍率: ${c.winOdds} 調子: ${c.cond}`
         ).join('　|　');
 
         marqueeText.innerHTML = `
             <span>🏁 第${raceCount || 1}回(${venue || "東京サーキット"}) (${distance || 1200}m)</span>
             <span>　${weatherIcon} 天候: ${weather || "晴"}　</span>
-            <span>📊 ${popListStr}</span>
+            <span> ${popListStr}</span>
         `;
     }
 }
