@@ -155,33 +155,40 @@ def process_race_results():
 
 # ▼ 追加: Discord APIにコードを送ってトークンをもらう関数
 async def exchange_code(code):
-    # 【1】ここを先ほど再取得した新しいシークレットに書き換えてください！
-    DISCORD_CLIENT_SECRET = "5gh4iIWjZfFJihf-yVkMkmzH6xOXUbov" 
-    DISCORD_CLIENT_ID = "1457823497937096836"
+    # ここにあなたの Client Secret を正確に入れてください
+    CLIENT_SECRET = "5gh4iIWjZfFJihf-yVkMkmzH6xOXUbov" 
+    CLIENT_ID = "1457823497937096836"
 
     url = "https://discord.com/api/oauth2/token"
     
-    # 【2】ここを「スラッシュなし」に固定します
+    # 【最重要】末尾にスラッシュを入れない！
     REDIRECT_URI = "https://race-game-8x0a.onrender.com" 
 
     data = urllib.parse.urlencode({
-        'client_id': DISCORD_CLIENT_ID,
-        'client_secret': DISCORD_CLIENT_SECRET,
+        'client_id': CLIENT_ID,
+        'client_secret': CLIENT_SECRET,
         'grant_type': 'authorization_code',
         'code': code,
-        'redirect_uri': REDIRECT_URI
+        'redirect_uri': REDIRECT_URI  # これが抜けていると失敗します
     }).encode()
     
-    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    headers = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'DiscordBot (https://github.com/Rapptz/discord.py, v2.0)'
+    }
+    
     req = urllib.request.Request(url, data=data, headers=headers)
     
     try:
+        # 非同期でリクエストを実行
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(None, urllib.request.urlopen, req)
+        response = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req))
         return json.loads(response.read().decode())
     except Exception as e:
-        # エラーが出た場合、Renderのログに詳細が出るようにします
-        print(f"❌ 認証エラーの詳細: {e}")
+        # Renderの「Logs」タブにエラーの詳細を出すようにします
+        print(f"❌ Discord認証エラー詳細: {e}")
+        if hasattr(e, 'read'):
+            print(f"❌ エラーレスポンス: {e.read().decode()}")
         return None
 
 async def handler(websocket):
