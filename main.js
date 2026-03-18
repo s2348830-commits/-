@@ -25,15 +25,18 @@ function updateMarquee(data) {
     const marqueeText = document.getElementById('marquee-text');
     if (marqueeText && data.length > 0) {
         let popSorted = [...data].sort((a, b) => a.pop - b.pop);
-        let popStr = popSorted.map(c => `${c.pop}番人気: ${c.num}番(${c.name})`).join(' ➔ ');
+        let topFav = popSorted[0];
 
-        let oddsSorted = [...data].sort((a, b) => a.winOdds - b.winOdds);
-        let oddsStr = oddsSorted.map(c => `${c.winOdds}x(${c.num}番)`).join(' ➔ ');
+        let condSorted = [...data].sort((a, b) => a.num - b.num);
+        let condList = condSorted.map(c => `${c.num}:${c.cond}`).join(' ');
+
+        let weather = "晴"; 
 
         marqueeText.innerHTML = `
-            <span>🏁 第1回 競車グランプリ 1200m</span>
-            <span>📊 人気順: ${popStr}</span>
-            <span>💰 低倍率順: ${oddsStr}</span>
+            <span>🏁 第1回(東京サーキット) (1200m)</span>
+            <span>　天候: ${weather}</span>
+            <span>　1番人気: ${topFav.num}番(${topFav.name}) 倍率: ${topFav.winOdds}x</span>
+            <span>　調子一覧: ${condList}</span>
         `;
     }
 }
