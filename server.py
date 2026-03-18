@@ -164,7 +164,9 @@ async def exchange_code(code):
         'client_id': DISCORD_CLIENT_ID,
         'client_secret': DISCORD_CLIENT_SECRET,
         'grant_type': 'authorization_code',
-        'code': code
+        'code': code,
+        # ▼ ここを追加！ Renderの自分のURLを指定します
+        'redirect_uri': 'https://race-game-8x0a.onrender.com'
     }).encode()
     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
     req = urllib.request.Request(url, data=data, headers=headers)
