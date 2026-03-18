@@ -10,18 +10,18 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- UI描画処理 ---
-window.updateOddsTable = function(newCarsData) {
+window.updateOddsTable = function(newCarsData, weather) {
     let newHash = newCarsData.map(c => c.winOdds).join("");
     if (lastCarsDataHash === newHash) return; 
     
     lastCarsDataHash = newHash;
     carsData = newCarsData;
     
-    updateMarquee(carsData);
+    updateMarquee(carsData, weather);
     renderOddsTable();      
 }
 
-function updateMarquee(data) {
+function updateMarquee(data, weather) {
     const marqueeText = document.getElementById('marquee-text');
     if (marqueeText && data.length > 0) {
         let popSorted = [...data].sort((a, b) => a.pop - b.pop);
@@ -30,13 +30,16 @@ function updateMarquee(data) {
         let condSorted = [...data].sort((a, b) => a.num - b.num);
         let condList = condSorted.map(c => `${c.num}:${c.cond}`).join(' ');
 
-        let weather = "晴"; 
+        let weatherIcon = "☀️";
+        if (weather === "曇") weatherIcon = "☁️";
+        if (weather === "雨") weatherIcon = "☔";
+        if (weather === "雷雨") weatherIcon = "⚡";
 
         marqueeText.innerHTML = `
             <span>🏁 第1回(東京サーキット) (1200m)</span>
-            <span>　天候: ${weather}</span>
-            <span>　1番人気: ${topFav.num}番(${topFav.name}) 倍率: ${topFav.winOdds}x</span>
-            <span>　調子一覧: ${condList}</span>
+            <span>　${weatherIcon} 天候: ${weather}</span>
+            <span>　🔥 1番人気: ${topFav.num}番(${topFav.name}) 倍率: ${topFav.winOdds}x</span>
+            <span>　📈 調子一覧: ${condList}</span>
         `;
     }
 }

@@ -35,8 +35,14 @@ race_state = "betting"
 race_timer = 600  # 本番用: 10分 (600秒)
 current_bets = [] # 今回のレースの全ベット履歴を保存
 current_cars_data = []
+current_weather = "晴"
 
 def generate_race_data():
+    global current_weather
+    urrent_weather = random.choice(["晴", "曇", "雨", "雷雨"])
+    volatility = 1.0
+    if current_weather == "雨": volatility = 1.2
+    if current_weather == "雷雨": volatility = 1.5
     cars = []
     popularities = [1, 2, 3, 4, 5]
     random.shuffle(popularities)
@@ -47,11 +53,12 @@ def generate_race_data():
     
     for i in range(5):
         pop = popularities[i]
-        if pop == 1: win_odds = round(random.uniform(1.8, 4.8), 1)
-        elif pop == 2: win_odds = round(random.uniform(3.5, 7.5), 1)
-        elif pop == 3: win_odds = round(random.uniform(5.5, 11.0), 1)
-        elif pop == 4: win_odds = round(random.uniform(8.0, 16.0), 1)
-        else: win_odds = round(random.uniform(10.0, 25.0), 1)
+        # 倍率にvolatility（荒れ具合）を掛け算する
+        if pop == 1: win_odds = round(random.uniform(1.8, 4.8) * volatility, 1)
+        elif pop == 2: win_odds = round(random.uniform(3.5, 7.5) * volatility, 1)
+        elif pop == 3: win_odds = round(random.uniform(5.5, 11.0) * volatility, 1)
+        elif pop == 4: win_odds = round(random.uniform(8.0, 16.0) * volatility, 1)
+        else: win_odds = round(random.uniform(10.0, 25.0) * volatility, 1)
         
         place_min = round(max(1.0, win_odds * 0.2), 1)
         place_max = round(max(1.1, win_odds * 0.4), 1)
@@ -249,7 +256,8 @@ async def timer_loop():
                 "type": "sync", 
                 "state": race_state, 
                 "timer": time_str,
-                "video_time": video_time
+                "video_time": video_time,
+                "weather": current_weather
             })
             websockets.broadcast(connected_clients, message)
             

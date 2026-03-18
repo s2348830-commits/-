@@ -43,6 +43,9 @@ function connectWebSocket() {
                 if (data.state) {
                     window.updateRaceState(data.state, data.timer, data.video_time);
                 }
+                if (data.cars_data) {
+                    window.updateOddsTable(data.cars_data, data.weather); 
+    }
                 break;
         }
     };
