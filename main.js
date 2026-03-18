@@ -1,34 +1,35 @@
-// --- 状態管理 ---
 let currentBetUnit = 100;
 let betHistory = [];
 let carsData = [];
-let currentBetTab = "単・複"; // 現在選択中の賭け式
-let lastCarsDataHash = "";  // 画面のチラつきを防ぐための変数
+let currentBetTab = "単・複"; 
+let lastCarsDataHash = "";  
 
 document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
 });
 
-// --- UI描画処理 ---
-window.updateOddsTable = function(newCarsData, weather) {
-    let newHash = newCarsData.map(c => c.winOdds).join("");
+// ▼ 修正: コース情報などを受け取るように引数を追加
+window.updateOddsTable = function(newCarsData, weather, raceCount, venue, distance) {
+    let newHash = newCarsData.map(c => c.winOdds).join("") + weather + raceCount;
     if (lastCarsDataHash === newHash) return; 
     
     lastCarsDataHash = newHash;
     carsData = newCarsData;
     
-    updateMarquee(carsData, weather);
+    updateMarquee(carsData, weather, raceCount, venue, distance);
     renderOddsTable();      
 }
 
-function updateMarquee(data, weather) {
+// ▼ 修正: お知らせ（マーキー）の表示形式を指定のフォーマットに変更
+function updateMarquee(data, weather, raceCount, venue, distance) {
     const marqueeText = document.getElementById('marquee-text');
     if (marqueeText && data.length > 0) {
         let popSorted = [...data].sort((a, b) => a.pop - b.pop);
         let topFav = popSorted[0];
 
+        // 1番から5番まで順番に調子を表示
         let condSorted = [...data].sort((a, b) => a.num - b.num);
-        let condList = condSorted.map(c => `${c.num}:${c.cond}`).join(' ');
+        let condList = condSorted.map(c => `${c.num}番(${c.cond})`).join(' ');
 
         let weatherIcon = "☀️";
         if (weather === "曇") weatherIcon = "☁️";
@@ -36,10 +37,10 @@ function updateMarquee(data, weather) {
         if (weather === "雷雨") weatherIcon = "⚡";
 
         marqueeText.innerHTML = `
-            <span>🏁 第1回(東京サーキット) (1200m)</span>
-            <span>　${weatherIcon} 天候: ${weather}</span>
-            <span>　🔥 1番人気: ${topFav.num}番(${topFav.name}) 倍率: ${topFav.winOdds}x</span>
-            <span>　📈 調子一覧: ${condList}</span>
+            <span>第${raceCount || 1}回(${venue || "東京サーキット"}) (${distance || 1200}m)</span>
+            <span>　${weatherIcon} 天候: ${weather || "晴"}</span>
+            <span>　🔥 1番人気: ${topFav.num}番(${topFav.name}) 倍率: ${topFav.winOdds}倍</span>
+            <span>　📈 調子: ${condList}</span>
         `;
     }
 }
@@ -53,7 +54,7 @@ function renderOddsTable() {
     if (currentBetTab === "単・複") {
         html = generateWinPlaceTable();
     } else if (currentBetTab === "転がし") {
-        html = generateRolloverTable(); // 転がし専用画面を呼び出す
+        html = generateRolloverTable();
     } else {
         html = generateComboTable(currentBetTab);
     }
@@ -70,13 +71,11 @@ function renderOddsTable() {
     }
 }
 
-// ▼ 修正：転がしUI（10000FP未満で制限、単勝全額固定）
 function generateRolloverTable() {
     const currentFpText = document.getElementById('current-fp').innerText;
     const currentFp = parseInt(currentFpText.replace(/,/g, ''), 10) || 0;
 
-    // 10000FP未満の場合は警告UIのみを表示
-    if (currentFp < 1000) {
+    if (currentFp < 10000) { // 10000未満
         return `
             <div style="padding: 20px; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; box-sizing: border-box;">
                 <h2 style="color: #ffcc00; margin-top: 0; margin-bottom: 20px;">🔄 転がし</h2>
@@ -89,7 +88,6 @@ function generateRolloverTable() {
         `;
     }
 
-    // 10000FP以上の場合は賭けるUIを表示
     return `
         <div style="padding: 20px; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; box-sizing: border-box; overflow-y: auto;">
             <h2 style="color: #ffcc00; margin-top: 0; margin-bottom: 5px;">🔄 転がし（単勝オールイン）</h2>
@@ -121,7 +119,6 @@ function generateRolloverTable() {
     `;
 }
 
-// ▼ 修正：転がしのボタン操作処理
 function setupRolloverEvents() {
     const submitBtn = document.getElementById('roll-submit-btn');
     const carsSelect = document.getElementById('roll-cars');
@@ -136,7 +133,6 @@ function setupRolloverEvents() {
             const currentFpText = document.getElementById('current-fp').innerText;
             const amt = parseInt(currentFpText.replace(/,/g, ''), 10) || 0;
             
-            // 念のための再チェック
             if (amt < 10000) {
                 alert("所持FPが10000未満のため転がし出来ません。");
                 renderOddsTable(); 
@@ -170,7 +166,6 @@ function setupRolloverEvents() {
             
             alert(`🔥 転がし発動！\n${type} (${carNumStr}番) に全額 ${amt} FP をオールインしました！\n（想定オッズ: ×${calculatedOdds}）`);
             
-            // 賭けた直後は所持金が減るため、UIを再描画してエラーUI（10000未満）に切り替える準備
             setTimeout(() => {
                 if(currentBetTab === "転がし") renderOddsTable();
             }, 500); 
@@ -178,7 +173,6 @@ function setupRolloverEvents() {
     }
 }
 
-// （これ以下は既存のテーブル描画・ボタン処理と同じです）
 function generateWinPlaceTable() {
     let headerHtml = `
         <div class="table-header">

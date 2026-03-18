@@ -4,12 +4,10 @@ import json
 import random
 import urllib.request
 import os
-import http  # ▼追加: ヘルスチェックの返信用
+import http
 
-# ▼ ここにDiscordのWebhook URLを貼り付けてください！
 WEBHOOK_URL = "https://discord.com/api/webhooks/1483775041148817480/6k7PEYZjNfO9Xik7HWroEzW0BLTP3jp3zzot7kJe00ZpdUkQPGipThBxtsY2gkseqYsK"
 
-# JSONデータの読み書き（Render上で動くように修正）
 FP_DATA_PATH = "fp_data.json"
 
 def load_fp_data():
@@ -17,7 +15,6 @@ def load_fp_data():
         with open(FP_DATA_PATH, 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
-        # テスト用ダミーデータ
         return {"users": {"884080992296534016": {"fp": 10000}}}
 
 def save_fp_data(data):
@@ -33,13 +30,21 @@ connected_clients = set()
 # --- レースの状態管理 ---
 race_state = "betting"
 race_timer = 600  # 本番用: 10分 (600秒)
-current_bets = [] # 今回のレースの全ベット履歴を保存
+current_bets = []
 current_cars_data = []
 current_weather = "晴"
 
+# ▼ 追加: レース回数と会場データ
+race_count = 1
+venues = [("東京サーキット", 1200), ("鈴鹿サーキット", 2000), ("富士スピードウェイ", 1600), ("モナコ市街地", 3000), ("ニュルブルクリンク", 5000)]
+current_venue, current_distance = venues[0]
+
 def generate_race_data():
-    global current_weather
-    urrent_weather = random.choice(["晴", "曇", "雨", "雷雨"])
+    global current_weather, current_venue, current_distance
+    # ▼ 修正: urrent_weatherのタイポを修正
+    current_weather = random.choice(["晴", "曇", "雨", "雷雨"])
+    current_venue, current_distance = random.choice(venues)
+    
     volatility = 1.0
     if current_weather == "雨": volatility = 1.2
     if current_weather == "雷雨": volatility = 1.5
@@ -53,7 +58,6 @@ def generate_race_data():
     
     for i in range(5):
         pop = popularities[i]
-        # 倍率にvolatility（荒れ具合）を掛け算する
         if pop == 1: win_odds = round(random.uniform(1.8, 4.8) * volatility, 1)
         elif pop == 2: win_odds = round(random.uniform(3.5, 7.5) * volatility, 1)
         elif pop == 3: win_odds = round(random.uniform(5.5, 11.0) * volatility, 1)
@@ -77,10 +81,8 @@ def generate_race_data():
 
 current_cars_data = generate_race_data()
 
-# Discordへ通知を送る関数
 def send_discord_notification(message):
     if WEBHOOK_URL == "ここにWebhookのURLを貼ってください":
-        print("Webhook URLが設定されていないため、通知をスキップしました。")
         return
 
     payload = {"content": message}
@@ -92,7 +94,6 @@ def send_discord_notification(message):
     except Exception as e:
         print(f"Discordへの通知に失敗しました: {e}")
 
-# 結果を集計・計算して通知する関数
 def process_race_results():
     global current_bets, fp_data
     
@@ -101,7 +102,7 @@ def process_race_results():
     
     r1, r2, r3, r4, r5 = results[0], results[1], results[2], results[3], results[4]
     
-    discord_msg = f"🏁 **レース結果発表！** 🏁\n"
+    discord_msg = f"🏁 **第{race_count}回 レース結果発表！** 🏁\n"
     discord_msg += f"🥇着: {r1}番\n🥈着: {r2}番\n🥉着: {r3}番\n4⃣着: {r4}番\n5⃣着: {r5}番\n\n"
     discord_msg += "📊 **プレイヤーのBET結果** 📊\n"
 
@@ -120,20 +121,13 @@ def process_race_results():
         b_cars = [int(c) for c in b_car_str.split('-')]
         is_win = False
         
-        if b_type == "単勝":
-            if b_cars[0] == r1: is_win = True
-        elif b_type == "複勝":
-            if b_cars[0] in [r1, r2, r3]: is_win = True
-        elif b_type == "馬連":
-            if set(b_cars) == {r1, r2}: is_win = True
-        elif b_type == "馬単":
-            if b_cars == [r1, r2]: is_win = True
-        elif b_type == "ワイド":
-            if set(b_cars).issubset({r1, r2, r3}): is_win = True
-        elif b_type == "三連複":
-            if set(b_cars) == {r1, r2, r3}: is_win = True
-        elif b_type == "三連単":
-            if b_cars == [r1, r2, r3]: is_win = True
+        if b_type == "単勝" and b_cars[0] == r1: is_win = True
+        elif b_type == "複勝" and b_cars[0] in [r1, r2, r3]: is_win = True
+        elif b_type == "馬連" and set(b_cars) == {r1, r2}: is_win = True
+        elif b_type == "馬単" and b_cars == [r1, r2]: is_win = True
+        elif b_type == "ワイド" and set(b_cars).issubset({r1, r2, r3}): is_win = True
+        elif b_type == "三連複" and set(b_cars) == {r1, r2, r3}: is_win = True
+        elif b_type == "三連単" and b_cars == [r1, r2, r3]: is_win = True
             
         payout = int(b_amount * b_odds) if is_win else 0
         
@@ -161,7 +155,6 @@ async def handler(websocket):
             if data["action"] == "login":
                 user_id = data["user_id"]
                 user_fp = fp_data["users"].get(user_id, {}).get("fp", 0) if user_id in fp_data["users"] else 0
-                
                 video_time = 35 - race_timer if race_state == "racing" else 0
 
                 response = {
@@ -170,7 +163,11 @@ async def handler(websocket):
                     "timer": f"{race_timer // 60:02d}:{race_timer % 60:02d}",
                     "fp": user_fp,
                     "cars_data": current_cars_data,
-                    "video_time": video_time
+                    "video_time": video_time,
+                    "weather": current_weather,
+                    "race_count": race_count,
+                    "venue": current_venue,
+                    "distance": current_distance
                 }
                 await websocket.send(json.dumps(response))
 
@@ -191,33 +188,25 @@ async def handler(websocket):
                 fp_data["users"][user_id]["fp"] -= bet_amount
                 save_fp_data(fp_data)
                 
-                current_bets.append({
-                    "user_id": user_id,
-                    "bet_info": bet_info
-                })
+                current_bets.append({"user_id": user_id, "bet_info": bet_info})
                 print(f"[{user_id}] が {bet_info['type']} ({bet_info['car']}) に {bet_amount}FP 賭けました")
                 
                 response = {"type": "sync", "fp": fp_data["users"][user_id]["fp"]}
                 await websocket.send(json.dumps(response))
-                elif data["action"] == "undo":
+
+            elif data["action"] == "undo":
                 user_id = data["user_id"]
                 if race_state != "betting":
                     continue
                 
-                # ユーザーの最新のベット履歴を探して削除し、FPを返還する
                 for i in range(len(current_bets) - 1, -1, -1):
                     if current_bets[i]["user_id"] == user_id:
                         refund_amount = int(current_bets[i]["bet_info"]["amount"])
-                        
-                        # FPを返金して保存
                         fp_data["users"][user_id]["fp"] += refund_amount
                         save_fp_data(fp_data)
-                        
-                        # ベット履歴から削除
                         del current_bets[i]
                         print(f"[{user_id}] が直前のベット({refund_amount}FP)を取り消しました")
                         
-                        # クライアントに返金後のFPを同期
                         response = {"type": "sync", "fp": fp_data["users"][user_id]["fp"]}
                         await websocket.send(json.dumps(response))
                         break
@@ -226,7 +215,7 @@ async def handler(websocket):
         connected_clients.remove(websocket)
 
 async def timer_loop():
-    global race_timer, race_state, current_cars_data
+    global race_timer, race_state, current_cars_data, race_count
     while True:
         if race_timer > 0:
             race_timer -= 1
@@ -246,6 +235,7 @@ async def timer_loop():
                 print("次のレースの準備をします")
                 race_state = "betting"
                 race_timer = 600
+                race_count += 1
                 current_cars_data = generate_race_data()
                 
         if connected_clients:
@@ -257,13 +247,16 @@ async def timer_loop():
                 "state": race_state, 
                 "timer": time_str,
                 "video_time": video_time,
-                "weather": current_weather
+                "weather": current_weather,
+                "cars_data": current_cars_data,
+                "race_count": race_count,
+                "venue": current_venue,
+                "distance": current_distance
             })
             websockets.broadcast(connected_clients, message)
             
         await asyncio.sleep(1)
 
-# ▼ Renderからの生存確認（ヘルスチェック）に「OK」と返事をする機能
 def health_check(arg1, arg2):
     path = arg1.path if hasattr(arg1, 'path') else arg1
     if path == "/":
@@ -275,7 +268,6 @@ def health_check(arg1, arg2):
 
 async def main():
     port = int(os.environ.get("PORT", 8765))
-    # process_request を追加してヘルスチェックに対応
     server = await websockets.serve(handler, "0.0.0.0", port, process_request=health_check)
     print(f"WebSocketサーバー起動！ ポート:{port}")
     await asyncio.gather(server.wait_closed(), timer_loop())
