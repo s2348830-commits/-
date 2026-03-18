@@ -155,27 +155,33 @@ def process_race_results():
 
 # ▼ 追加: Discord APIにコードを送ってトークンをもらう関数
 async def exchange_code(code):
-    if not DISCORD_CLIENT_ID or not DISCORD_CLIENT_SECRET:
-        print("エラー: DISCORD_CLIENT_ID または DISCORD_CLIENT_SECRET が設定されていません。")
-        return None
+    # 【1】ここを先ほど再取得した新しいシークレットに書き換えてください！
+    DISCORD_CLIENT_SECRET = "5gh4iIWjZfFJihf-yVkMkmzH6xOXUbov" 
+    DISCORD_CLIENT_ID = "1457823497937096836"
 
     url = "https://discord.com/api/oauth2/token"
+    
+    # 【2】ここを「スラッシュなし」に固定します
+    REDIRECT_URI = "https://race-game-8x0a.onrender.com" 
+
     data = urllib.parse.urlencode({
         'client_id': DISCORD_CLIENT_ID,
         'client_secret': DISCORD_CLIENT_SECRET,
         'grant_type': 'authorization_code',
         'code': code,
-        # ▼ ここを追加！ Renderの自分のURLを指定します
-        'redirect_uri': 'https://race-game-8x0a.onrender.com'
+        'redirect_uri': REDIRECT_URI
     }).encode()
+    
     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
     req = urllib.request.Request(url, data=data, headers=headers)
+    
     try:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, urllib.request.urlopen, req)
         return json.loads(response.read().decode())
     except Exception as e:
-        print(f"トークンの交換に失敗しました: {e}")
+        # エラーが出た場合、Renderのログに詳細が出るようにします
+        print(f"❌ 認証エラーの詳細: {e}")
         return None
 
 async def handler(websocket):
