@@ -1,14 +1,15 @@
+// --- 状態管理 ---
 let currentBetUnit = 100;
 let betHistory = [];
 let carsData = [];
-let currentBetTab = "単・複"; 
-let lastCarsDataHash = "";  
+let currentBetTab = "単・複"; // 現在選択中の賭け式
+let lastCarsDataHash = "";  // 画面のチラつきを防ぐための変数
 
 document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
 });
 
-// ▼ 修正: コース情報などを受け取るように引数を追加
+// --- UI描画処理 ---
 window.updateOddsTable = function(newCarsData, weather, raceCount, venue, distance) {
     let newHash = newCarsData.map(c => c.winOdds).join("") + weather + raceCount;
     if (lastCarsDataHash === newHash) return; 
@@ -20,27 +21,27 @@ window.updateOddsTable = function(newCarsData, weather, raceCount, venue, distan
     renderOddsTable();      
 }
 
-// ▼ 修正: お知らせ（マーキー）の表示形式を指定のフォーマットに変更
+// ▼ 修正: お知らせ（マーキー）の表示を全人気順（1〜5）に対応
 function updateMarquee(data, weather, raceCount, venue, distance) {
     const marqueeText = document.getElementById('marquee-text');
     if (marqueeText && data.length > 0) {
-        let popSorted = [...data].sort((a, b) => a.pop - b.pop);
-        let topFav = popSorted[0];
-
-        // 1番から5番まで順番に調子を表示
-        let condSorted = [...data].sort((a, b) => a.num - b.num);
-        let condList = condSorted.map(c => `${c.num}番(${c.cond})`).join(' ');
-
         let weatherIcon = "☀️";
         if (weather === "曇") weatherIcon = "☁️";
         if (weather === "雨") weatherIcon = "☔";
         if (weather === "雷雨") weatherIcon = "⚡";
 
+        // 人気順（1番人気〜5番人気）に並び替える
+        let popSorted = [...data].sort((a, b) => a.pop - b.pop);
+        
+        // ご要望のフォーマットで文字列を生成
+        let popListStr = popSorted.map(c => 
+            `${c.pop}番人気: ${c.num}番 倍率: ${c.winOdds} 調子: ${c.cond}`
+        ).join('　|　');
+
         marqueeText.innerHTML = `
-            <span>第${raceCount || 1}回(${venue || "東京サーキット"}) (${distance || 1200}m)</span>
-            <span>　${weatherIcon} 天候: ${weather || "晴"}</span>
-            <span>　🔥 1番人気: ${topFav.num}番(${topFav.name}) 倍率: ${topFav.winOdds}倍</span>
-            <span>　📈 調子: ${condList}</span>
+            <span>🏁 第${raceCount || 1}回(${venue || "東京サーキット"}) (${distance || 1200}m)</span>
+            <span>　${weatherIcon} 天候: ${weather || "晴"}　</span>
+            <span>📊 ${popListStr}</span>
         `;
     }
 }
@@ -75,7 +76,7 @@ function generateRolloverTable() {
     const currentFpText = document.getElementById('current-fp').innerText;
     const currentFp = parseInt(currentFpText.replace(/,/g, ''), 10) || 0;
 
-    if (currentFp < 10000) { // 10000未満
+    if (currentFp < 10000) { 
         return `
             <div style="padding: 20px; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; box-sizing: border-box;">
                 <h2 style="color: #ffcc00; margin-top: 0; margin-bottom: 20px;">🔄 転がし</h2>
