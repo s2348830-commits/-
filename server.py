@@ -4,12 +4,13 @@ import json
 import random
 import urllib.request
 import os
+import http  # ▼追加: ヘルスチェックの返信用
 
 # ▼ ここにDiscordのWebhook URLを貼り付けてください！
 WEBHOOK_URL = "https://discord.com/api/webhooks/1483775041148817480/6k7PEYZjNfO9Xik7HWroEzW0BLTP3jp3zzot7kJe00ZpdUkQPGipThBxtsY2gkseqYsK"
 
-# JSONデータの読み書き（パスは環境に合わせて修正してください）
-FP_DATA_PATH = r"C:\Users\81906\Desktop\OmikujiBot\fp_data.json"
+# JSONデータの読み書き（Render上で動くように修正）
+FP_DATA_PATH = "fp_data.json"
 
 def load_fp_data():
     try:
@@ -73,7 +74,6 @@ current_cars_data = generate_race_data()
 def send_discord_notification(message):
     if WEBHOOK_URL == "ここにWebhookのURLを貼ってください":
         print("Webhook URLが設定されていないため、通知をスキップしました。")
-        print("送信予定だったメッセージ:\n", message)
         return
 
     payload = {"content": message}
@@ -89,7 +89,6 @@ def send_discord_notification(message):
 def process_race_results():
     global current_bets, fp_data
     
-    # 1. 順位をランダムに決定 (1〜5の数字をシャッフル)
     results = [1, 2, 3, 4, 5]
     random.shuffle(results)
     
@@ -99,26 +98,21 @@ def process_race_results():
     discord_msg += f"🥇1着: {r1}番\n🥈2着: {r2}番\n🥉3着: {r3}番\n4着: {r4}番\n5着: {r5}番\n\n"
     discord_msg += "📊 **プレイヤーのBET結果** 📊\n"
 
-    # 2. 各ベットの当たり判定とFP計算
     for bet in current_bets:
         user_id = bet["user_id"]
         b_type = bet["bet_info"]["type"]
-        b_car_str = str(bet["bet_info"]["car"]) # "1" や "1-2"
+        b_car_str = str(bet["bet_info"]["car"])
         b_amount = int(bet["bet_info"]["amount"])
         
-        # 複勝の「1.0~1.1」のような表記対策（最低倍率を採用）
         raw_odds = bet["bet_info"]["odds"]
         if isinstance(raw_odds, str) and "~" in raw_odds:
             b_odds = float(raw_odds.split("~")[0])
         else:
             b_odds = float(raw_odds)
 
-        # 文字列を数字のリストに変換 ("1-3" -> [1, 3])
         b_cars = [int(c) for c in b_car_str.split('-')]
-        
         is_win = False
         
-        # 判定ロジック
         if b_type == "単勝":
             if b_cars[0] == r1: is_win = True
         elif b_type == "複勝":
@@ -134,26 +128,20 @@ def process_race_results():
         elif b_type == "三連単":
             if b_cars == [r1, r2, r3]: is_win = True
             
-        # FPの計算
         payout = int(b_amount * b_odds) if is_win else 0
         
-        # JSONデータの更新 (勝利時のみFPを足す。賭けた時の消費はベット受付時に処理済み)
         if payout > 0:
             if user_id in fp_data["users"]:
                 fp_data["users"][user_id]["fp"] += payout
                 
-        # メッセージの追加
         mention = f"<@{user_id}>" if user_id != "test_user" else "ゲスト"
         discord_msg += f"{mention} | {b_type} ({b_car_str}) | {b_amount}FP ➔ **{payout}FP**\n"
 
     if not current_bets:
         discord_msg += "今回のレースは誰もBETしませんでした。\n"
 
-    # データ保存と通知
     save_fp_data(fp_data)
     send_discord_notification(discord_msg)
-    
-    # ベット履歴をリセット
     current_bets = []
 
 async def handler(websocket):
@@ -188,25 +176,20 @@ async def handler(websocket):
                 bet_info = data["bet_info"]
                 bet_amount = int(bet_info['amount'])
                 
-                # FPが足りるか確認して減らす
                 current_fp = fp_data["users"].get(user_id, {}).get("fp", 0) if user_id in fp_data["users"] else 0
                 if current_fp < bet_amount:
-                    # 本来はエラーを返す処理ですが、一旦はログ出力のみ
                     print(f"[{user_id}] 残高不足です")
                     continue
                 
-                # FPを消費して保存
                 fp_data["users"][user_id]["fp"] -= bet_amount
                 save_fp_data(fp_data)
                 
-                # ベット履歴に追加
                 current_bets.append({
                     "user_id": user_id,
                     "bet_info": bet_info
                 })
                 print(f"[{user_id}] が {bet_info['type']} ({bet_info['car']}) に {bet_amount}FP 賭けました")
                 
-                # 更新したFPをクライアントに返す
                 response = {"type": "sync", "fp": fp_data["users"][user_id]["fp"]}
                 await websocket.send(json.dumps(response))
                 
@@ -222,18 +205,18 @@ async def timer_loop():
             if race_state == "betting":
                 print("ベット終了！レース開始！")
                 race_state = "racing"
-                race_timer = 35 # レース動画再生時間 (35秒)
+                race_timer = 35 
                 
             elif race_state == "racing":
                 print("レース終了！結果発表＆FP配布！")
                 race_state = "result"
-                race_timer = 10 # 結果表示フェーズ (10秒)
-                process_race_results() # ▼ ここで判定・計算・Discord通知を実行！
+                race_timer = 10 
+                process_race_results()
                 
             elif race_state == "result":
                 print("次のレースの準備をします")
                 race_state = "betting"
-                race_timer = 600 # ベット時間に戻る (10分)
+                race_timer = 600
                 current_cars_data = generate_race_data()
                 
         if connected_clients:
@@ -250,10 +233,20 @@ async def timer_loop():
             
         await asyncio.sleep(1)
 
+# ▼ Renderからの生存確認（ヘルスチェック）に「OK」と返事をする機能
+def health_check(arg1, arg2):
+    path = arg1.path if hasattr(arg1, 'path') else arg1
+    if path == "/":
+        if hasattr(arg1, 'respond'):
+            return arg1.respond(http.HTTPStatus.OK, "OK\n")
+        else:
+            return http.HTTPStatus.OK, [], b"OK\n"
+    return None
+
 async def main():
-    # Renderが指定するポートを取得（なければ8765）し、"0.0.0.0"で外部公開する
     port = int(os.environ.get("PORT", 8765))
-    server = await websockets.serve(handler, "0.0.0.0", port)
+    # process_request を追加してヘルスチェックに対応
+    server = await websockets.serve(handler, "0.0.0.0", port, process_request=health_check)
     print(f"WebSocketサーバー起動！ ポート:{port}")
     await asyncio.gather(server.wait_closed(), timer_loop())
 
