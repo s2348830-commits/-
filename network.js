@@ -15,7 +15,7 @@ async function setupDiscordAndSocket() {
 }
 
 function connectWebSocket() {
-    const WS_URL = "wss://kyousha-server.onrender.com";
+    const WS_URL = "wss://race-game-8x0a.onrender.com";
     socket = new WebSocket(WS_URL);
 
     socket.onopen = () => {
