@@ -1,3 +1,4 @@
+import './network.js';
 // --- 状態管理 ---
 let currentBetUnit = 100;
 let betHistory = [];
@@ -5,9 +6,11 @@ let carsData = [];
 let currentBetTab = "単・複"; // 現在選択中の賭け式
 let lastCarsDataHash = "";  // 画面のチラつきを防ぐための変数
 
-document.addEventListener('DOMContentLoaded', () => {
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupEventListeners);
+} else {
     setupEventListeners();
-});
+}
 
 // --- UI描画処理 ---
 window.updateOddsTable = function(newCarsData, weather, raceCount, venue, distance) {
@@ -319,7 +322,7 @@ function setupEventListeners() {
         btn.addEventListener('click', (e) => {
             document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active'));
             e.currentTarget.classList.add('active');
-            currentBetTab = e.currentTarget.innerText;
+            currentBetTab = e.currentTarget.textContent.trim();
             renderOddsTable(); 
         });
     });
