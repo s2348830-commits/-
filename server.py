@@ -3,6 +3,7 @@ import websockets
 import json
 import random
 import urllib.request
+import os
 
 # ▼ ここにDiscordのWebhook URLを貼り付けてください！
 WEBHOOK_URL = "https://discord.com/api/webhooks/1483775041148817480/6k7PEYZjNfO9Xik7HWroEzW0BLTP3jp3zzot7kJe00ZpdUkQPGipThBxtsY2gkseqYsK"
@@ -250,8 +251,10 @@ async def timer_loop():
         await asyncio.sleep(1)
 
 async def main():
-    server = await websockets.serve(handler, "localhost", 8765)
-    print("WebSocketサーバー起動！")
+    # Renderが指定するポートを取得（なければ8765）し、"0.0.0.0"で外部公開する
+    port = int(os.environ.get("PORT", 8765))
+    server = await websockets.serve(handler, "0.0.0.0", port)
+    print(f"WebSocketサーバー起動！ ポート:{port}")
     await asyncio.gather(server.wait_closed(), timer_loop())
 
 if __name__ == "__main__":

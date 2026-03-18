@@ -15,7 +15,7 @@ async function setupDiscordAndSocket() {
 }
 
 function connectWebSocket() {
-    const WS_URL = `ws://${window.location.hostname}:8765`;
+    const WS_URL = "wss://kyousha-server.onrender.com";
     socket = new WebSocket(WS_URL);
 
     socket.onopen = () => {
