@@ -95,7 +95,7 @@ def process_race_results():
     r1, r2, r3, r4, r5 = results[0], results[1], results[2], results[3], results[4]
     
     discord_msg = f"🏁 **レース結果発表！** 🏁\n"
-    discord_msg += f"🥇1着: {r1}番\n🥈2着: {r2}番\n🥉3着: {r3}番\n4着: {r4}番\n5着: {r5}番\n\n"
+    discord_msg += f"🥇着: {r1}番\n🥈着: {r2}番\n🥉着: {r3}番\n4⃣着: {r4}番\n5⃣着: {r5}番\n\n"
     discord_msg += "📊 **プレイヤーのBET結果** 📊\n"
 
     for bet in current_bets:
@@ -192,6 +192,28 @@ async def handler(websocket):
                 
                 response = {"type": "sync", "fp": fp_data["users"][user_id]["fp"]}
                 await websocket.send(json.dumps(response))
+                elif data["action"] == "undo":
+                user_id = data["user_id"]
+                if race_state != "betting":
+                    continue
+                
+                # ユーザーの最新のベット履歴を探して削除し、FPを返還する
+                for i in range(len(current_bets) - 1, -1, -1):
+                    if current_bets[i]["user_id"] == user_id:
+                        refund_amount = int(current_bets[i]["bet_info"]["amount"])
+                        
+                        # FPを返金して保存
+                        fp_data["users"][user_id]["fp"] += refund_amount
+                        save_fp_data(fp_data)
+                        
+                        # ベット履歴から削除
+                        del current_bets[i]
+                        print(f"[{user_id}] が直前のベット({refund_amount}FP)を取り消しました")
+                        
+                        # クライアントに返金後のFPを同期
+                        response = {"type": "sync", "fp": fp_data["users"][user_id]["fp"]}
+                        await websocket.send(json.dumps(response))
+                        break
                 
     finally:
         connected_clients.remove(websocket)

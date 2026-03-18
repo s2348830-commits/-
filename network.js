@@ -65,5 +65,14 @@ window.sendBetToServer = function(betData) {
     }
 };
 
+window.sendUndoToServer = function() {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            action: "undo",
+            user_id: currentUserId
+        }));
+    }
+};
+
 // 起動！
 setupDiscordAndSocket();

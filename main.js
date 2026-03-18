@@ -3,7 +3,7 @@ let currentBetUnit = 100;
 let betHistory = [];
 let carsData = [];
 let currentBetTab = "単・複"; // 現在選択中の賭け式
-let lastCarsDataHash = "";  // ▼ 画面のチラつき（毎秒更新）を防ぐための変数
+let lastCarsDataHash = "";  // 画面のチラつきを防ぐための変数
 
 document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
@@ -11,26 +11,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // --- UI描画処理 ---
 window.updateOddsTable = function(newCarsData) {
-    // データが変わっていない場合は再描画をスキップ（スクロールや文字入力の邪魔をしないため）
     let newHash = newCarsData.map(c => c.winOdds).join("");
     if (lastCarsDataHash === newHash) return; 
     
     lastCarsDataHash = newHash;
     carsData = newCarsData;
     
-    updateMarquee(carsData); // マーキーの更新
-    renderOddsTable();       // オッズ表の更新
+    updateMarquee(carsData);
+    renderOddsTable();      
 }
 
-// ▼ 追加：上の流れる文字（マーキー）を自動生成する機能
 function updateMarquee(data) {
     const marqueeText = document.getElementById('marquee-text');
     if (marqueeText && data.length > 0) {
-        // 人気順に並び替え
         let popSorted = [...data].sort((a, b) => a.pop - b.pop);
         let popStr = popSorted.map(c => `${c.pop}番人気: ${c.num}番(${c.name})`).join(' ➔ ');
 
-        // 低倍率順に並び替え
         let oddsSorted = [...data].sort((a, b) => a.winOdds - b.winOdds);
         let oddsStr = oddsSorted.map(c => `${c.winOdds}x(${c.num}番)`).join(' ➔ ');
 
@@ -51,14 +47,13 @@ function renderOddsTable() {
     if (currentBetTab === "単・複") {
         html = generateWinPlaceTable();
     } else if (currentBetTab === "転がし") {
-        html = generateRolloverTable(); // ▼ 転がし専用画面を呼び出す
+        html = generateRolloverTable(); // 転がし専用画面を呼び出す
     } else {
         html = generateComboTable(currentBetTab);
     }
 
     tableContainer.innerHTML = html;
 
-    // タブによってイベントの設定を変える
     if (currentBetTab === "転がし") {
         setupRolloverEvents();
     } else {
@@ -69,64 +64,61 @@ function renderOddsTable() {
     }
 }
 
-// ▼ 追加：転がし（全額＆カスタム）専用UIの生成
+// ▼ 修正：転がしUI（10000FP未満で制限、単勝全額固定）
 function generateRolloverTable() {
+    const currentFpText = document.getElementById('current-fp').innerText;
+    const currentFp = parseInt(currentFpText.replace(/,/g, ''), 10) || 0;
+
+    // 10000FP未満の場合は警告UIのみを表示
+    if (currentFp < 10000) {
+        return `
+            <div style="padding: 20px; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; box-sizing: border-box;">
+                <h2 style="color: #ffcc00; margin-top: 0; margin-bottom: 20px;">🔄 転がし</h2>
+                <div style="background: rgba(255,0,0,0.2); border: 2px solid red; padding: 30px; border-radius: 10px; text-align: center; width: 90%; max-width: 400px;">
+                    <p style="font-size: 20px; font-weight: bold; color: #ff6666; margin: 0; line-height: 1.5;">
+                        所持FPが10000未満のため<br>転がし出来ません。
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+
+    // 10000FP以上の場合は賭けるUIを表示
     return `
         <div style="padding: 20px; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; box-sizing: border-box; overflow-y: auto;">
-            <h2 style="color: #ffcc00; margin-top: 0; margin-bottom: 5px;">🔄 転がし（カスタムBET）</h2>
-            <p style="margin-bottom: 20px; font-size: 14px;">所持しているFPを全額賭けたり、自由に指定してBETできます。</p>
+            <h2 style="color: #ffcc00; margin-top: 0; margin-bottom: 5px;">🔄 転がし（単勝オールイン）</h2>
+            <p style="margin-bottom: 20px; font-size: 14px;">所持している全FP（${currentFp} FP）を指定した車（単勝）に賭けます。</p>
             
             <div style="background: #222; border: 2px solid #555; padding: 20px; border-radius: 10px; width: 90%; max-width: 400px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 15px; align-items: center;">
                     <span style="font-size: 16px; font-weight: bold;">賭け式:</span>
-                    <select id="roll-type" style="font-size: 16px; padding: 5px; width: 65%;">
-                        <option value="単勝">単勝</option>
-                        <option value="複勝">複勝</option>
-                        <option value="馬連">馬連</option>
-                        <option value="馬単">馬単</option>
-                        <option value="ワイド">ワイド</option>
-                        <option value="三連複">三連複</option>
-                        <option value="三連単">三連単</option>
-                    </select>
+                    <span style="font-size: 16px; font-weight: bold; color: #00ff00;">単勝（固定）</span>
                 </div>
                 
                 <div style="display: flex; justify-content: space-between; margin-bottom: 15px; align-items: center;">
                     <span style="font-size: 16px; font-weight: bold;">車番号:</span>
-                    <input type="text" id="roll-cars" placeholder="例: 1-2-3" style="font-size: 16px; padding: 5px; width: 65%; text-align: center;">
+                    <select id="roll-cars" style="font-size: 16px; padding: 5px; width: 65%;">
+                        ${carsData.map(c => `<option value="${c.num}">${c.num}番（${c.name}）</option>`).join('')}
+                    </select>
                 </div>
                 
                 <div style="display: flex; justify-content: space-between; margin-bottom: 20px; align-items: center;">
                     <span style="font-size: 16px; font-weight: bold;">BET額:</span>
-                    <div style="width: 65%; display: flex; gap: 5px;">
-                        <input type="number" id="roll-amount" placeholder="0" style="font-size: 16px; padding: 5px; width: 100%; text-align: right;">
-                        <button id="roll-all-btn" style="background: #d4145a; color: white; border: none; padding: 0 10px; font-weight: bold; cursor: pointer; border-radius: 3px;">全額</button>
-                    </div>
+                    <span style="font-size: 16px; font-weight: bold; color: #ffcc00;" id="roll-amount-display">${currentFp} FP (全額)</span>
                 </div>
                 
-                <button id="roll-submit-btn" style="width: 100%; background: linear-gradient(to bottom, #00ff00, #009900); color: black; font-size: 18px; font-weight: bold; padding: 12px; border-radius: 5px; border: 2px solid white; cursor: pointer;">
-                    この内容でBETする
+                <button id="roll-submit-btn" style="width: 100%; background: linear-gradient(to bottom, #d4145a, #8e0038); color: white; font-size: 18px; font-weight: bold; padding: 12px; border-radius: 5px; border: 2px solid white; cursor: pointer;">
+                    全額オールイン！
                 </button>
             </div>
         </div>
     `;
 }
 
-// ▼ 追加：転がし画面でのボタン操作処理
+// ▼ 修正：転がしのボタン操作処理
 function setupRolloverEvents() {
-    const allBtn = document.getElementById('roll-all-btn');
     const submitBtn = document.getElementById('roll-submit-btn');
-    const amtInput = document.getElementById('roll-amount');
-    const typeSelect = document.getElementById('roll-type');
-    const carsInput = document.getElementById('roll-cars');
-
-    if (allBtn) {
-        // 全額ボタンを押した時、現在の所持FPを入力欄にセット
-        allBtn.addEventListener('click', () => {
-            const currentFpText = document.getElementById('current-fp').innerText;
-            const maxFp = parseInt(currentFpText.replace(/,/g, ''), 10) || 0;
-            amtInput.value = maxFp;
-        });
-    }
+    const carsSelect = document.getElementById('roll-cars');
 
     if (submitBtn) {
         submitBtn.addEventListener('click', () => {
@@ -135,43 +127,31 @@ function setupRolloverEvents() {
                 return;
             }
             
-            const type = typeSelect.value;
-            const carsStr = carsInput.value.trim().replace(/,/g, '-').replace(/ /g, '');
-            const amt = parseInt(amtInput.value, 10);
+            const currentFpText = document.getElementById('current-fp').innerText;
+            const amt = parseInt(currentFpText.replace(/,/g, ''), 10) || 0;
             
-            if (!amt || amt <= 0) { alert("正しいBET額を入力してください。"); return; }
-            if (!carsStr) { alert("車番号を入力してください。(例: 1-2)"); return; }
-
-            const carsArr = carsStr.split('-').map(Number);
-            
-            // バリデーション（桁数チェック）
-            if (type === "単勝" || type === "複勝") {
-                if (carsArr.length !== 1) { alert(type + "は1台だけ指定してください。"); return; }
-            } else if (type === "馬連" || type === "馬単" || type === "ワイド") {
-                if (carsArr.length !== 2) { alert(type + "は2台指定してください。(例: 1-2)"); return; }
-            } else if (type === "三連複" || type === "三連単") {
-                if (carsArr.length !== 3) { alert(type + "は3台指定してください。(例: 1-2-3)"); return; }
+            // 念のための再チェック
+            if (amt < 10000) {
+                alert("所持FPが10000未満のため転がし出来ません。");
+                renderOddsTable(); 
+                return;
             }
-
-            const invalidCars = carsArr.filter(num => !carsData.find(c => c.num === num));
-            if (invalidCars.length > 0) { alert("存在しない車番号が含まれています。"); return; }
-
-            // オッズの自動計算
-            const calculatedOdds = calculateOddsForRollover(type, carsArr);
             
-            let color = "white", text = "black";
-            if (carsArr.length === 1) {
-                const carData = carsData.find(c => c.num == carsArr[0]);
-                if (carData) { color = carData.color; text = carData.text; }
-            }
+            const carNumStr = carsSelect.value;
+            const carsArr = [parseInt(carNumStr, 10)];
+            const type = "単勝";
+
+            const carData = carsData.find(c => c.num == carsArr[0]);
+            if (!carData) return;
+            const calculatedOdds = carData.winOdds;
 
             const newBet = {
                 type: type,
-                car: carsStr,
+                car: carNumStr,
                 odds: calculatedOdds,
                 amount: amt,
-                color: color,
-                text: text,
+                color: carData.color,
+                text: carData.text,
                 cars: carsArr
             };
             
@@ -182,32 +162,15 @@ function setupRolloverEvents() {
                 window.sendBetToServer(newBet);
             }
             
-            alert(`🎯 転がし完了！\n${type} (${carsStr}) に ${amt} FP BETしました！\n（想定オッズ: ×${calculatedOdds}）`);
+            alert(`🔥 転がし発動！\n${type} (${carNumStr}番) に全額 ${amt} FP をオールインしました！\n（想定オッズ: ×${calculatedOdds}）`);
             
-            amtInput.value = '';
-            carsInput.value = '';
+            // 賭けた直後は所持金が減るため、UIを再描画してエラーUI（10000未満）に切り替える準備
+            setTimeout(() => {
+                if(currentBetTab === "転がし") renderOddsTable();
+            }, 500); 
         });
     }
 }
-
-// ▼ 追加：転がし用オッズ計算機
-function calculateOddsForRollover(type, carsArr) {
-    let selectedCars = carsData.filter(c => carsArr.includes(c.num));
-    if (selectedCars.length !== carsArr.length) return 0; 
-    
-    if (type === "単勝") return selectedCars[0].winOdds;
-    if (type === "複勝") return selectedCars[0].placeOdds.split('~')[0]; 
-    
-    let baseOdds = selectedCars.reduce((acc, car) => acc * car.winOdds, 1);
-    if (type === "馬連") return (baseOdds * 0.4).toFixed(1);
-    if (type === "馬単") return (baseOdds * 0.8).toFixed(1);
-    if (type === "ワイド") return (baseOdds * 0.15).toFixed(1);
-    if (type === "三連複") return (baseOdds * 0.2).toFixed(1);
-    if (type === "三連単") return (baseOdds * 0.6).toFixed(1);
-    
-    return 0;
-}
-
 
 // （これ以下は既存のテーブル描画・ボタン処理と同じです）
 function generateWinPlaceTable() {
@@ -327,7 +290,7 @@ function getPermutations(arr, size) {
 }
 
 function updateBetUI() {
-    if (currentBetTab === "転がし") return; // 転がしタブの時はボタンUIがないのでスキップ
+    if (currentBetTab === "転がし") return;
 
     document.querySelectorAll('.bet-btn').forEach(btn => {
         btn.classList.remove('betted');
@@ -373,7 +336,9 @@ function setupEventListeners() {
             if (betHistory.length > 0) {
                 betHistory.pop();
                 updateBetUI();
-                alert("直前のBETを取り消しました。");
+                if (window.sendUndoToServer) {
+                    window.sendUndoToServer();
+                }
             }
         });
     }
