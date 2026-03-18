@@ -3,6 +3,7 @@ import websockets
 import json
 import random
 import urllib.request
+import urllib.parse  # ▼ 追加: URLエンコード用
 import os
 import http
 import pymongo # ▼ 追加: MongoDB用ライブラリ
@@ -12,6 +13,12 @@ logging.getLogger("websockets.server").setLevel(logging.CRITICAL)
 logging.getLogger("websockets.http11").setLevel(logging.CRITICAL)
 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1483775041148817480/6k7PEYZjNfO9Xik7HWroEzW0BLTP3jp3zzot7kJe00ZpdUkQPGipThBxtsY2gkseqYsK"
+
+# ==========================================
+# ▼ Discord 認証情報 (Renderの環境変数に設定してください)
+# ==========================================
+DISCORD_CLIENT_ID = "1457823497937096836"
+DISCORD_CLIENT_SECRET = "5gh4iIWjZfFJihf-yVkMkmzH6xOXUbov"
 
 # ==========================================
 # ▼ データベース (MongoDB) の設定
@@ -146,13 +153,53 @@ def process_race_results():
     send_discord_notification(discord_msg)
     current_bets = []
 
+# ▼ 追加: Discord APIにコードを送ってトークンをもらう関数
+async def exchange_code(code):
+    if not DISCORD_CLIENT_ID or not DISCORD_CLIENT_SECRET:
+        print("エラー: DISCORD_CLIENT_ID または DISCORD_CLIENT_SECRET が設定されていません。")
+        return None
+
+    url = "https://discord.com/api/oauth2/token"
+    data = urllib.parse.urlencode({
+        'client_id': DISCORD_CLIENT_ID,
+        'client_secret': DISCORD_CLIENT_SECRET,
+        'grant_type': 'authorization_code',
+        'code': code
+    }).encode()
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    req = urllib.request.Request(url, data=data, headers=headers)
+    try:
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, urllib.request.urlopen, req)
+        return json.loads(response.read().decode())
+    except Exception as e:
+        print(f"トークンの交換に失敗しました: {e}")
+        return None
+
 async def handler(websocket):
     connected_clients.add(websocket)
     try:
         async for message in websocket:
             data = json.loads(message)
             
-            if data["action"] == "login":
+            # ▼ 追加: 認証フェーズの処理
+            if data["action"] == "auth":
+                code = data["code"]
+                print("認証コードを受信しました、トークンと交換します...")
+                token_response = await exchange_code(code)
+                
+                if token_response and "access_token" in token_response:
+                    await websocket.send(json.dumps({
+                        "type": "auth_success",
+                        "access_token": token_response["access_token"]
+                    }))
+                else:
+                    await websocket.send(json.dumps({
+                        "type": "error",
+                        "message": "Discord認証に失敗しました。"
+                    }))
+
+            elif data["action"] == "login":
                 user_id = data["user_id"]
                 
                 # ▼ 修正: DBからユーザーを探す、いなければ作る
