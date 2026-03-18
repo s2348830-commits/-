@@ -5,26 +5,30 @@ import random
 import urllib.request
 import os
 import http
+import pymongo # ▼ 追加: MongoDB用ライブラリ
+import logging
+
+logging.getLogger("websockets.server").setLevel(logging.CRITICAL)
+logging.getLogger("websockets.http11").setLevel(logging.CRITICAL)
 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1483775041148817480/6k7PEYZjNfO9Xik7HWroEzW0BLTP3jp3zzot7kJe00ZpdUkQPGipThBxtsY2gkseqYsK"
 
-FP_DATA_PATH = "fp_data.json"
+# ==========================================
+# ▼ データベース (MongoDB) の設定
+# ==========================================
+MONGO_URL = os.environ.get("MONGO_URL")
 
-def load_fp_data():
+if MONGO_URL:
     try:
-        with open(FP_DATA_PATH, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {"users": {"884080992296534016": {"fp": 10000}}}
-
-def save_fp_data(data):
-    try:
-        with open(FP_DATA_PATH, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        mongo_client = pymongo.MongoClient(MONGO_URL)
+        db = mongo_client["race_game_db"] # データベース名
+        users_col = db["users"]           # ユーザー情報を入れるコレクション(テーブル)
+        print("✅ MongoDBへの接続に成功しました！")
     except Exception as e:
-        print(f"FPデータの保存に失敗しました: {e}")
+        print(f"❌ MongoDB接続エラー: {e}")
+else:
+    print("⚠️ 警告: MONGO_URLが環境変数に設定されていません。")
 
-fp_data = load_fp_data()
 connected_clients = set()
 
 # --- レースの状態管理 ---
@@ -34,14 +38,12 @@ current_bets = []
 current_cars_data = []
 current_weather = "晴"
 
-# ▼ 追加: レース回数と会場データ
 race_count = 1
 venues = [("東京サーキット", 1200), ("鈴鹿サーキット", 2000), ("富士スピードウェイ", 1600), ("モナコ市街地", 3000), ("ニュルブルクリンク", 5000)]
 current_venue, current_distance = venues[0]
 
 def generate_race_data():
     global current_weather, current_venue, current_distance
-    # ▼ 修正: urrent_weatherのタイポを修正
     current_weather = random.choice(["晴", "曇", "雨", "雷雨"])
     current_venue, current_distance = random.choice(venues)
     
@@ -95,7 +97,7 @@ def send_discord_notification(message):
         print(f"Discordへの通知に失敗しました: {e}")
 
 def process_race_results():
-    global current_bets, fp_data
+    global current_bets
     
     results = [1, 2, 3, 4, 5]
     random.shuffle(results)
@@ -104,7 +106,7 @@ def process_race_results():
     
     discord_msg = f"🏁 **第{race_count}回 レース結果発表！** 🏁\n"
     discord_msg += f"🥇着: {r1}番\n🥈着: {r2}番\n🥉着: {r3}番\n4⃣着: {r4}番\n5⃣着: {r5}番\n\n"
-    discord_msg += "📊 **プレイヤーのBET結果** 📊\n"
+    discord_msg += " 👤**プレイヤーのBET結果**👤 \n"
 
     for bet in current_bets:
         user_id = bet["user_id"]
@@ -131,22 +133,20 @@ def process_race_results():
             
         payout = int(b_amount * b_odds) if is_win else 0
         
-        if payout > 0:
-            if user_id in fp_data["users"]:
-                fp_data["users"][user_id]["fp"] += payout
+        # ▼ 修正: DB上のFPを更新
+        if payout > 0 and MONGO_URL:
+            users_col.update_one({"_id": user_id}, {"$inc": {"fp": payout}})
                 
-        mention = f"<@{user_id}>" if user_id != "test_user" else "ゲスト"
+        mention = f"<@{user_id}>" if user_id.isdigit() else user_id
         discord_msg += f"{mention} | {b_type} ({b_car_str}) | {b_amount}FP ➔ **{payout}FP**\n"
 
     if not current_bets:
         discord_msg += "今回のレースは誰もBETしませんでした。\n"
 
-    save_fp_data(fp_data)
     send_discord_notification(discord_msg)
     current_bets = []
 
 async def handler(websocket):
-    global fp_data
     connected_clients.add(websocket)
     try:
         async for message in websocket:
@@ -154,7 +154,18 @@ async def handler(websocket):
             
             if data["action"] == "login":
                 user_id = data["user_id"]
-                user_fp = fp_data["users"].get(user_id, {}).get("fp", 0) if user_id in fp_data["users"] else 0
+                
+                # ▼ 修正: DBからユーザーを探す、いなければ作る
+                user_fp = 0
+                if MONGO_URL:
+                    user_doc = users_col.find_one({"_id": user_id})
+                    if not user_doc:
+                        users_col.insert_one({"_id": user_id, "fp": 10000})
+                        user_fp = 10000
+                        print(f"🔰 DBに新規登録: {user_id} に10000FPを付与しました")
+                    else:
+                        user_fp = user_doc.get("fp", 0)
+
                 video_time = 35 - race_timer if race_state == "racing" else 0
 
                 response = {
@@ -180,18 +191,24 @@ async def handler(websocket):
                 bet_info = data["bet_info"]
                 bet_amount = int(bet_info['amount'])
                 
-                current_fp = fp_data["users"].get(user_id, {}).get("fp", 0) if user_id in fp_data["users"] else 0
-                if current_fp < bet_amount:
-                    print(f"[{user_id}] 残高不足です")
-                    continue
-                
-                fp_data["users"][user_id]["fp"] -= bet_amount
-                save_fp_data(fp_data)
+                if MONGO_URL:
+                    user_doc = users_col.find_one({"_id": user_id})
+                    current_fp = user_doc.get("fp", 0) if user_doc else 0
+                    
+                    if current_fp < bet_amount:
+                        print(f"[{user_id}] 残高不足です")
+                        continue
+                    
+                    # DBのFPを減らす
+                    users_col.update_one({"_id": user_id}, {"$inc": {"fp": -bet_amount}})
+                    new_fp = current_fp - bet_amount
+                else:
+                    new_fp = 0 # DBがない時の緊急措置
                 
                 current_bets.append({"user_id": user_id, "bet_info": bet_info})
                 print(f"[{user_id}] が {bet_info['type']} ({bet_info['car']}) に {bet_amount}FP 賭けました")
                 
-                response = {"type": "sync", "fp": fp_data["users"][user_id]["fp"]}
+                response = {"type": "sync", "fp": new_fp}
                 await websocket.send(json.dumps(response))
 
             elif data["action"] == "undo":
@@ -202,12 +219,19 @@ async def handler(websocket):
                 for i in range(len(current_bets) - 1, -1, -1):
                     if current_bets[i]["user_id"] == user_id:
                         refund_amount = int(current_bets[i]["bet_info"]["amount"])
-                        fp_data["users"][user_id]["fp"] += refund_amount
-                        save_fp_data(fp_data)
+                        
+                        if MONGO_URL:
+                            # DBのFPを戻す
+                            users_col.update_one({"_id": user_id}, {"$inc": {"fp": refund_amount}})
+                            user_doc = users_col.find_one({"_id": user_id})
+                            new_fp = user_doc.get("fp", 0)
+                        else:
+                            new_fp = 0
+
                         del current_bets[i]
                         print(f"[{user_id}] が直前のベット({refund_amount}FP)を取り消しました")
                         
-                        response = {"type": "sync", "fp": fp_data["users"][user_id]["fp"]}
+                        response = {"type": "sync", "fp": new_fp}
                         await websocket.send(json.dumps(response))
                         break
                 
