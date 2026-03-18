@@ -227,6 +227,7 @@ async def handler(websocket):
                         print(f"🔰 DBに新規登録: {user_id} に10000FPを付与しました")
                     else:
                         user_fp = user_doc.get("fp", 0)
+                        print(f"🍀 既存ユーザーのFPを同期: {user_id} -> {user_fp}FP")
 
                 video_time = 35 - race_timer if race_state == "racing" else 0
 
