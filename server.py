@@ -148,18 +148,27 @@ async def handler(websocket):
                     await websocket.send(json.dumps({"type": "error", "message": "Discord認証に失敗しました。"}))
 
             elif data["action"] == "login":
-                u_id, g_id = str(data["user_id"]), str(data.get("guild_id", "DM"))
-                client_doc_id = f"{g_id}_{u_id}"
+                # ボットのDB仕様に合わせて、ユーザーIDのみを「数値(int)」に変換して使用する
+                client_doc_id = int(data["user_id"])
+                
+                # WebSocket接続オブジェクト自体にIDを記録しておく
                 websocket.doc_id = client_doc_id  
-                user_fp = 10000
+                
+                user_fp = 10000 # 初期値
                 
                 if MONGO_URL:
+                    # 数値のIDでMongoDBを検索
                     user_doc = users_col.find_one({"_id": client_doc_id})
                     if not user_doc:
-                        users_col.insert_one({"_id": client_doc_id, "fp": 10000, "guild_id": g_id, "user_id": u_id})
+                        # DBに存在しない場合は新規作成（Botと同じく数値のIDで保存）
+                        users_col.insert_one({
+                            "_id": client_doc_id, 
+                            "fp": 10000
+                        })
+                        print(f"🆕 新規ユーザー登録: {client_doc_id}")
                     else:
                         user_fp = user_doc.get("fp", 0)
-                        print(f"💰 ボット同期完了: {client_doc_id} -> {user_fp}FP", flush=True)
+                        print(f"💰 ボット同期成功: {client_doc_id} -> {user_fp}FP")
                 
                 await websocket.send(json.dumps({
                     "type": "sync", "state": race_state, "timer": f"{race_timer // 60:02d}:{race_timer % 60:02d}", 
