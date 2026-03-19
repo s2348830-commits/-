@@ -5,53 +5,119 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>おみくじBot FPステータス</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <style>
+        body { margin: 0; padding: 1rem; }
+        /* ロード中の画面を中央に配置 */
+        #loading { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 80vh; }
+    </style>
 </head>
 <body>
-    <main class="container">
-        <h1>🎋 おみくじBot ユーザーページ</h1>
-        
-        {% if not logged_in %}
-            <article>
-                <p>自分のFP（ポイント）を確認するには、Discordアカウントでログインしてください。</p>
-                <a href="/login" role="button">Discordでログイン</a>
-            </article>
-        {% else %}
-            <article>
-                <header style="display: flex; align-items: center; gap: 1rem;">
-                    <img src="{{ avatar_url }}" alt="アバター" style="width: 50px; border-radius: 50%;">
-                    <h2>{{ username }} さんのステータス</h2>
-                </header>
-                
-                <h3>総所持 FP: <strong>{{ total_fp }}</strong> FP</h3>
-                <hr>
-                
-                <h4>参加サーバー別のFP</h4>
-                {% if servers|length > 0 %}
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>サーバーID (Guild ID)</th>
-                                <th>所持FP</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for server in servers %}
-                            <tr>
-                                <td>{{ server.guild_id }}</td>
-                                <td><strong>{{ server.fp }}</strong> FP</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                {% else %}
-                    <p>まだFPを獲得していません。Botで遊んでみましょう！</p>
-                {% endif %}
-                
-                <footer>
-                    <a href="/logout" class="secondary" role="button">ログアウト</a>
-                </footer>
-            </article>
-        {% endif %}
+    <div id="loading">
+        <h3 aria-busy="true">Discordと通信中...</h3>
+        <p>あなたのFPデータを読み込んでいます</p>
+    </div>
+
+    <main class="container" id="app" style="display: none;">
+        <h1>🎋 ユーザーページ</h1>
+        <article>
+            <header style="display: flex; align-items: center; gap: 1rem;">
+                <img id="avatar" src="" alt="アバター" style="width: 50px; border-radius: 50%;">
+                <h2 id="username" style="margin: 0;"></h2>
+            </header>
+            
+            <h3>総所持 FP: <strong id="total_fp" style="color: #f5a623;"></strong> FP</h3>
+            <hr>
+            
+            <h4>参加サーバー別のFP</h4>
+            <table id="server_table">
+                <thead>
+                    <tr>
+                        <th>サーバーID</th>
+                        <th>所持FP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+        </article>
     </main>
+
+    <script type="module">
+        import { DiscordSDK } from "https://esm.sh/@discord/embedded-app-sdk@1.2.0";
+
+        // app.py から渡された CLIENT_ID を使う
+        const discordSdk = new DiscordSDK("{{ client_id }}");
+
+        async function setupActivity() {
+            try {
+                // 1. アクティビティの準備完了を待つ
+                await discordSdk.ready();
+
+                // 2. Discordクライアントから認証コードをもらう
+                const { code } = await discordSdk.commands.authorize({
+                    client_id: "{{ client_id }}",
+                    response_type: "code",
+                    state: "",
+                    prompt: "none",
+                    scope: ["identify"]
+                });
+
+                // 3. 自分のサーバー(app.py)にコードを送って、トークンに変換してもらう
+                const tokenResponse = await fetch("/api/token", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ code: code })
+                });
+                const tokenData = await tokenResponse.json();
+                const accessToken = tokenData.access_token;
+
+                // 4. SDKを認証する
+                await discordSdk.commands.authenticate({
+                    access_token: accessToken
+                });
+
+                // 5. 自分のサーバー(app.py)からMongoDBのFPデータをもらう
+                const fpResponse = await fetch("/api/fp", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ access_token: accessToken })
+                });
+                const fpData = await fpResponse.json();
+
+                // 6. データを画面に反映させる
+                document.getElementById("loading").style.display = "none";
+                document.getElementById("app").style.display = "block";
+
+                // アバター画像のURLを組み立てる
+                const user = fpData.user;
+                const avatarUrl = user.avatar
+                    ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
+                    : `https://cdn.discordapp.com/embed/avatars/0.png`;
+
+                document.getElementById("avatar").src = avatarUrl;
+                document.getElementById("username").innerText = `${user.global_name || user.username} さんのステータス`;
+                document.getElementById("total_fp").innerText = fpData.total_fp;
+
+                // テーブルにデータを追加する
+                const tbody = document.querySelector("#server_table tbody");
+                if (fpData.servers.length > 0) {
+                    fpData.servers.forEach(s => {
+                        const tr = document.createElement("tr");
+                        tr.innerHTML = `<td>${s.guild_id}</td><td><strong>${s.fp}</strong> FP</td>`;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="2">まだFPを獲得していません。</td></tr>`;
+                }
+
+            } catch (error) {
+                console.error("アクティビティのセットアップ中にエラー:", error);
+                document.getElementById("loading").innerHTML = `<h3 style="color: red;">エラーが発生しました</h3><p>Discordからのデータ取得に失敗しました。</p>`;
+            }
+        }
+
+        // 実行！
+        setupActivity();
+    </script>
 </body>
 </html>
