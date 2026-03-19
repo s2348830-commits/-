@@ -148,10 +148,9 @@ async def handler(websocket):
                     await websocket.send(json.dumps({"type": "error", "message": "Discord認証に失敗しました。"}))
 
             elif data["action"] == "login":
+                # ▼ 修正部分：Omikuji-Botの仕様に合わせて "ギルドID_ユーザーID" を _id にする
                 user_id_str = str(data.get("user_id"))
                 guild_id_str = str(data.get("guild_id", "1439932066904014861")) # デフォルトのギルドID
-                
-                # Omikuji-Botの仕様に合わせて "ギルドID_ユーザーID" の文字列を_idにする
                 client_doc_id = f"{guild_id_str}_{user_id_str}"
                 
                 # WebSocket接続オブジェクト自体にIDを記録しておく
@@ -162,12 +161,12 @@ async def handler(websocket):
                 if MONGO_URL:
                     user_doc = users_col.find_one({"_id": client_doc_id})
                     if not user_doc:
-                        # DBに存在しない場合は新規作成（Botと同じ形式で保存）
+                        # DBに存在しない場合は新規作成
                         users_col.insert_one({
                             "_id": client_doc_id, 
                             "fp": 10000,
-                            "ギルドID": guild_id_str,
-                            "ユーザーID": user_id_str
+                            "guild_id": guild_id_str,
+                            "user_id": user_id_str
                         })
                         print(f"🆕 新規ユーザー登録: {client_doc_id}")
                     else:
@@ -253,7 +252,7 @@ async def timer_loop():
                 
         await asyncio.sleep(1)
 
-# ▼ 過去に審査を1発で通過した、最もシンプルで確実なヘルスチェック
+# ▼ シンプルなヘルスチェック
 def health_check(arg1, arg2):
     try:
         path = arg1.path if hasattr(arg1, 'path') else arg1
