@@ -9,8 +9,9 @@ import http
 import pymongo
 import logging
 
-# ログの設定 (Renderでエラーが見えるように INFO レベルに変更)
-logging.basicConfig(level=logging.INFO)
+# ログの設定
+logging.getLogger("websockets.server").setLevel(logging.CRITICAL)
+logging.getLogger("websockets.http11").setLevel(logging.CRITICAL)
 
 # Discord Webhook URL
 WEBHOOK_URL = "https://discord.com/api/webhooks/1483775041148817480/6k7PEYZjNfO9Xik7HWroEzW0BLTP3jp3zzot7kJe00ZpdUkQPGipThBxtsY2gkseqYsK"
@@ -239,34 +240,18 @@ async def timer_loop():
                 
         await asyncio.sleep(1)
 
-# ▼ HTTPとWebSocketを自動で仕分けする完全版ヘルスチェック関数
-async def health_check(*args, **kwargs):
-    is_ws = False
-    
-    # 接続リクエストの中に「これはWebSocketです」という合図(Upgradeヘッダー)があるか確認
-    for arg in args:
-        if hasattr(arg, 'headers'):
-            if 'Upgrade' in arg.headers or 'upgrade' in arg.headers:
-                is_ws = True
-        elif hasattr(arg, 'get'):
-            if arg.get('Upgrade') or arg.get('upgrade'):
-                is_ws = True
-                
-    # 合図がない（Renderの死活監視ロボットからのアクセス）場合は「200 OK」を返す
-    if not is_ws:
-        import http
-        try:
-            import websockets.http11
-            return websockets.http11.Response(200, "OK", [("Content-Type", "text/plain")], b"OK\n")
-        except Exception:
-            return http.HTTPStatus.OK, [("Content-Type", "text/plain")], b"OK\n"
-            
-    # 合図がある（ゲームからの本当の通信）場合は、Noneを返してそのままWebSocketとして繋ぐ
+# ▼ 過去に審査を1発で通過した、最もシンプルで確実なヘルスチェック
+def health_check(arg1, arg2):
+    try:
+        path = arg1.path if hasattr(arg1, 'path') else arg1
+        if path == "/" or path == "/health":
+            return (http.HTTPStatus.OK, [], b"OK\n")
+    except Exception:
+        pass
     return None
 
 async def main():
-    port = int(os.environ.get("PORT", 10000))
-    # process_request=health_check を復活させ、Renderの監視を突破します
+    port = int(os.environ.get("PORT", 8765))
     server = await websockets.serve(handler, "0.0.0.0", port, process_request=health_check)
     print(f"🚀 WebSocketサーバー起動！ ポート:{port}", flush=True)
     await asyncio.gather(server.wait_closed(), timer_loop())
