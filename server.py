@@ -5,15 +5,13 @@ import random
 import urllib.request
 import urllib.parse
 import os
-import http
 import pymongo
 import logging
 
-# ログの設定
+# 不要なログを非表示
 logging.getLogger("websockets.server").setLevel(logging.CRITICAL)
 logging.getLogger("websockets.http11").setLevel(logging.CRITICAL)
 
-# Discord Webhook URL
 WEBHOOK_URL = "https://discord.com/api/webhooks/1483775041148817480/6k7PEYZjNfO9Xik7HWroEzW0BLTP3jp3zzot7kJe00ZpdUkQPGipThBxtsY2gkseqYsK"
 
 # ==========================================
@@ -31,7 +29,6 @@ if MONGO_URL:
     try:
         mongo_client = pymongo.MongoClient(MONGO_URL)
         db = mongo_client["race_game_db"]
-        # ボットと同じコレクション名を使用
         users_col = db["discord_users"]
         print("✅ MongoDBへの接続に成功しました！")
     except Exception as e:
@@ -62,6 +59,7 @@ def generate_race_data():
     names = ["レッドフェラーリ", "ブルーポルシェ", "イエローマクラーレン", "グリーンスープラ", "シルバーGTR"]
     colors = ["white", "black", "red", "blue", "yellow"]
     texts = ["black", "white", "white", "white", "black"]
+    
     for i in range(5):
         pop = popularities[i]
         win_odds = round(random.uniform(1.8, 4.8) * volatility, 1) if pop == 1 else \
@@ -89,8 +87,8 @@ def process_race_results():
     random.shuffle(results)
     r = results[:5]
     discord_msg = f"🏁 **第{race_count}回 レース結果発表！** 🏁\n🥇:{r[0]}番 🥈:{r[1]}番 🥉:{r[2]}番\n\n 👤**プレイヤーのBET結果**👤 \n"
+    
     for bet in current_bets:
-        # ボットと同じ複合ID（doc_id）を使用してDBを更新
         doc_id = bet["doc_id"]
         user_id = bet["user_id"]
         b_info = bet["bet_info"]
@@ -110,7 +108,6 @@ def process_race_results():
         
         payout = int(b_amount * b_odds) if is_win else 0
         if payout > 0 and MONGO_URL:
-            # 複合IDで所持金を増やす
             users_col.update_one({"_id": doc_id}, {"$inc": {"fp": payout}})
         
         mention = f"<@{user_id}>" if user_id.isdigit() else user_id
@@ -138,7 +135,6 @@ async def exchange_code(code):
 
 async def handler(websocket):
     connected_clients.add(websocket)
-    # セッション中に使用するボット用複合ID
     client_doc_id = None 
     try:
         async for message in websocket:
@@ -153,39 +149,24 @@ async def handler(websocket):
 
             elif data["action"] == "login":
                 u_id, g_id = str(data["user_id"]), str(data.get("guild_id", "DM"))
-                # ボットのID形式「サーバーID_ユーザーID」を生成
                 client_doc_id = f"{g_id}_{u_id}"
                 
-                # ★追加: WebSocket接続オブジェクト自体にIDを記録しておく（後で一括配信時に使うため）
+                # 接続オブジェクトにIDを記憶（レース結果配布時の個別通知用）
                 websocket.doc_id = client_doc_id  
-                
                 user_fp = 10000
                 
                 if MONGO_URL:
                     user_doc = users_col.find_one({"_id": client_doc_id})
                     if not user_doc:
-                        # 新規登録（ボットと同じ形式で保存）
-                        users_col.insert_one({
-                            "_id": client_doc_id, 
-                            "fp": 10000, 
-                            "guild_id": g_id, 
-                            "user_id": u_id
-                        })
+                        users_col.insert_one({"_id": client_doc_id, "fp": 10000, "guild_id": g_id, "user_id": u_id})
                     else:
                         user_fp = user_doc.get("fp", 0)
-                        print(f"💰 ボット同期成功: {client_doc_id} -> {user_fp}FP")
+                        print(f"💰 ボット同期完了: {client_doc_id} -> {user_fp}FP")
                 
                 await websocket.send(json.dumps({
-                    "type": "sync", 
-                    "state": race_state, 
-                    "timer": f"{race_timer // 60:02d}:{race_timer % 60:02d}", 
-                    "fp": user_fp, 
-                    "cars_data": current_cars_data, 
-                    "video_time": 35 - race_timer if race_state == "racing" else 0, 
-                    "weather": current_weather, 
-                    "race_count": race_count, 
-                    "venue": current_venue, 
-                    "distance": current_distance
+                    "type": "sync", "state": race_state, "timer": f"{race_timer // 60:02d}:{race_timer % 60:02d}", 
+                    "fp": user_fp, "cars_data": current_cars_data, "video_time": 35 - race_timer if race_state == "racing" else 0, 
+                    "weather": current_weather, "race_count": race_count, "venue": current_venue, "distance": current_distance
                 }))
 
             elif data["action"] == "bet":
@@ -195,17 +176,11 @@ async def handler(websocket):
                 if MONGO_URL:
                     user_doc = users_col.find_one({"_id": client_doc_id})
                     curr_fp = user_doc.get("fp", 0) if user_doc else 0
-                    if curr_fp < amt:
-                        print(f"[{client_doc_id}] 残高不足です")
-                        continue
+                    if curr_fp < amt: continue
                     
-                    # 複合IDで所持金を減らす
                     users_col.update_one({"_id": client_doc_id}, {"$inc": {"fp": -amt}})
-                    # 集計・通知用に doc_id と user_id の両方を保持
                     current_bets.append({
-                        "doc_id": client_doc_id, 
-                        "user_id": data["user_id"], 
-                        "bet_info": data["bet_info"]
+                        "doc_id": client_doc_id, "user_id": data["user_id"], "bet_info": data["bet_info"]
                     })
                     await websocket.send(json.dumps({"type": "sync", "fp": curr_fp - amt}))
 
@@ -215,7 +190,6 @@ async def handler(websocket):
                     if current_bets[i]["doc_id"] == client_doc_id:
                         ref_amt = int(current_bets[i]["bet_info"]["amount"])
                         if MONGO_URL:
-                            # 複合IDで所持金を戻す
                             users_col.update_one({"_id": client_doc_id}, {"$inc": {"fp": ref_amt}})
                             new_fp = users_col.find_one({"_id": client_doc_id}).get("fp", 0)
                             await websocket.send(json.dumps({"type": "sync", "fp": new_fp}))
@@ -227,7 +201,7 @@ async def handler(websocket):
 async def timer_loop():
     global race_timer, race_state, current_cars_data, race_count
     while True:
-        state_changed_to_result = False # 結果発表に切り替わったかどうかのフラグ
+        state_changed_to_result = False
         
         if race_timer > 0:
             race_timer -= 1
@@ -237,13 +211,13 @@ async def timer_loop():
             elif race_state == "racing":
                 race_state, race_timer = "result", 10
                 process_race_results()
-                state_changed_to_result = True # ★配当処理が終わった合図
+                state_changed_to_result = True
             elif race_state == "result":
                 race_state, race_timer, race_count, current_cars_data = "betting", 600, race_count + 1, generate_race_data()
         
         if connected_clients:
             if state_changed_to_result:
-                # 結果発表のタイミングだけ、各プレイヤーの最新FPをDBから取得して個別に送る
+                # 結果発表時のみ、最新の所持金をDBから個別に取得して送信
                 for ws in connected_clients:
                     try:
                         msg_dict = {
@@ -259,7 +233,6 @@ async def timer_loop():
                     except Exception:
                         pass
             else:
-                # 通常のカウントダウンは全員に一斉送信
                 msg = json.dumps({
                     "type": "sync", "state": race_state, "timer": f"{race_timer // 60:02d}:{race_timer % 60:02d}", 
                     "video_time": 35 - race_timer if race_state == "racing" else 0, 
@@ -270,14 +243,11 @@ async def timer_loop():
                 
         await asyncio.sleep(1)
 
-def health_check(arg1, arg2):
-    path = arg1.path if hasattr(arg1, 'path') else arg1
-    return (http.HTTPStatus.OK, [], b"OK\n") if path == "/" else None
-
 async def main():
-    port = int(os.environ.get("PORT", 8765))
-    server = await websockets.serve(handler, "0.0.0.0", port, process_request=health_check)
-    print(f"WebSocketサーバー起動！ ポート:{port}")
+    port = int(os.environ.get("PORT", 10000))
+    # Renderのヘルスチェックを最も確実に通過する設定（関数指定なし）
+    server = await websockets.serve(handler, "0.0.0.0", port)
+    print(f"🚀 WebSocketサーバー起動！ ポート:{port}")
     await asyncio.gather(server.wait_closed(), timer_loop())
 
 if __name__ == "__main__":
