@@ -148,8 +148,11 @@ async def handler(websocket):
                     await websocket.send(json.dumps({"type": "error", "message": "Discord認証に失敗しました。"}))
 
             elif data["action"] == "login":
-                # ボットのDB仕様に合わせて、ユーザーIDのみを「数値(int)」に変換して使用する
-                client_doc_id = int(data["user_id"])
+                user_id_str = str(data.get("user_id"))
+                guild_id_str = str(data.get("guild_id", "1439932066904014861")) # デフォルトのギルドID
+                
+                # Omikuji-Botの仕様に合わせて "ギルドID_ユーザーID" の文字列を_idにする
+                client_doc_id = f"{guild_id_str}_{user_id_str}"
                 
                 # WebSocket接続オブジェクト自体にIDを記録しておく
                 websocket.doc_id = client_doc_id  
@@ -157,13 +160,14 @@ async def handler(websocket):
                 user_fp = 10000 # 初期値
                 
                 if MONGO_URL:
-                    # 数値のIDでMongoDBを検索
                     user_doc = users_col.find_one({"_id": client_doc_id})
                     if not user_doc:
-                        # DBに存在しない場合は新規作成（Botと同じく数値のIDで保存）
+                        # DBに存在しない場合は新規作成（Botと同じ形式で保存）
                         users_col.insert_one({
                             "_id": client_doc_id, 
-                            "fp": 10000
+                            "fp": 10000,
+                            "ギルドID": guild_id_str,
+                            "ユーザーID": user_id_str
                         })
                         print(f"🆕 新規ユーザー登録: {client_doc_id}")
                     else:
