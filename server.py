@@ -109,6 +109,7 @@ def process_race_results():
         
         payout = int(b_amount * b_odds) if is_win else 0
         if payout > 0 and MONGO_URL:
+            # ★ ボットと同じIDでFPを増やす
             users_col.update_one({"_id": doc_id}, {"$inc": {"fp": payout}})
         
         mention = f"<@{user_id}>" if user_id.isdigit() else user_id
@@ -150,6 +151,8 @@ async def handler(websocket):
 
             elif data["action"] == "login":
                 u_id, g_id = str(data["user_id"]), str(data.get("guild_id", "DM"))
+                
+                # ★ ボットと完全に同じ「サーバーID_ユーザーID」を生成
                 client_doc_id = f"{g_id}_{u_id}"
                 websocket.doc_id = client_doc_id  
                 user_fp = 10000
@@ -179,6 +182,7 @@ async def handler(websocket):
                         print(f"[{client_doc_id}] 残高不足です")
                         continue
                     
+                    # ★ ボットと同じIDのFPを減らす
                     users_col.update_one({"_id": client_doc_id}, {"$inc": {"fp": -amt}})
                     current_bets.append({
                         "doc_id": client_doc_id, "user_id": data["user_id"], "bet_info": data["bet_info"]
@@ -191,6 +195,7 @@ async def handler(websocket):
                     if current_bets[i]["doc_id"] == client_doc_id:
                         ref_amt = int(current_bets[i]["bet_info"]["amount"])
                         if MONGO_URL:
+                            # ★ 取り消した分のFPを戻す
                             users_col.update_one({"_id": client_doc_id}, {"$inc": {"fp": ref_amt}})
                             new_fp = users_col.find_one({"_id": client_doc_id}).get("fp", 0)
                             await websocket.send(json.dumps({"type": "sync", "fp": new_fp}))
