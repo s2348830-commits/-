@@ -9,9 +9,8 @@ import http
 import pymongo
 import logging
 
-# ログの設定
-logging.getLogger("websockets.server").setLevel(logging.CRITICAL)
-logging.getLogger("websockets.http11").setLevel(logging.CRITICAL)
+# ログの設定 (Renderでエラーが見えるように INFO レベルに変更)
+logging.basicConfig(level=logging.INFO)
 
 # Discord Webhook URL
 WEBHOOK_URL = "https://discord.com/api/webhooks/1483775041148817480/6k7PEYZjNfO9Xik7HWroEzW0BLTP3jp3zzot7kJe00ZpdUkQPGipThBxtsY2gkseqYsK"
@@ -31,13 +30,12 @@ if MONGO_URL:
     try:
         mongo_client = pymongo.MongoClient(MONGO_URL)
         db = mongo_client["race_game_db"]
-        # ボットと同じコレクション名を使用
         users_col = db["discord_users"]
-        print("✅ MongoDBへの接続に成功しました！")
+        print("✅ MongoDBへの接続に成功しました！", flush=True)
     except Exception as e:
-        print(f"❌ MongoDB接続エラー: {e}")
+        print(f"❌ MongoDB接続エラー: {e}", flush=True)
 else:
-    print("⚠️ 警告: MONGO_URLが環境変数に設定されていません。")
+    print("⚠️ 警告: MONGO_URLが環境変数に設定されていません。", flush=True)
 
 connected_clients = set()
 
@@ -81,7 +79,7 @@ current_cars_data = generate_race_data()
 def send_discord_notification(message):
     req = urllib.request.Request(WEBHOOK_URL, data=json.dumps({"content": message}).encode(), headers={"Content-Type": "application/json", "User-Agent": "RaceBot/1.0"})
     try: urllib.request.urlopen(req)
-    except Exception as e: print(f"通知失敗: {e}")
+    except Exception as e: print(f"通知失敗: {e}", flush=True)
 
 def process_race_results():
     global current_bets
@@ -109,7 +107,6 @@ def process_race_results():
         
         payout = int(b_amount * b_odds) if is_win else 0
         if payout > 0 and MONGO_URL:
-            # ★ ボットと同じIDでFPを増やす
             users_col.update_one({"_id": doc_id}, {"$inc": {"fp": payout}})
         
         mention = f"<@{user_id}>" if user_id.isdigit() else user_id
@@ -132,7 +129,7 @@ async def exchange_code(code):
         response = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req))
         return json.loads(response.read().decode())
     except Exception as e:
-        print(f"❌ Discord認証エラー詳細: {e}")
+        print(f"❌ Discord認証エラー詳細: {e}", flush=True)
         return None
 
 async def handler(websocket):
@@ -151,8 +148,6 @@ async def handler(websocket):
 
             elif data["action"] == "login":
                 u_id, g_id = str(data["user_id"]), str(data.get("guild_id", "DM"))
-                
-                # ★ ボットと完全に同じ「サーバーID_ユーザーID」を生成
                 client_doc_id = f"{g_id}_{u_id}"
                 websocket.doc_id = client_doc_id  
                 user_fp = 10000
@@ -163,7 +158,7 @@ async def handler(websocket):
                         users_col.insert_one({"_id": client_doc_id, "fp": 10000, "guild_id": g_id, "user_id": u_id})
                     else:
                         user_fp = user_doc.get("fp", 0)
-                        print(f"💰 ボット同期完了: {client_doc_id} -> {user_fp}FP")
+                        print(f"💰 ボット同期完了: {client_doc_id} -> {user_fp}FP", flush=True)
                 
                 await websocket.send(json.dumps({
                     "type": "sync", "state": race_state, "timer": f"{race_timer // 60:02d}:{race_timer % 60:02d}", 
@@ -178,11 +173,8 @@ async def handler(websocket):
                 if MONGO_URL:
                     user_doc = users_col.find_one({"_id": client_doc_id})
                     curr_fp = user_doc.get("fp", 0) if user_doc else 0
-                    if curr_fp < amt:
-                        print(f"[{client_doc_id}] 残高不足です")
-                        continue
+                    if curr_fp < amt: continue
                     
-                    # ★ ボットと同じIDのFPを減らす
                     users_col.update_one({"_id": client_doc_id}, {"$inc": {"fp": -amt}})
                     current_bets.append({
                         "doc_id": client_doc_id, "user_id": data["user_id"], "bet_info": data["bet_info"]
@@ -195,7 +187,6 @@ async def handler(websocket):
                     if current_bets[i]["doc_id"] == client_doc_id:
                         ref_amt = int(current_bets[i]["bet_info"]["amount"])
                         if MONGO_URL:
-                            # ★ 取り消した分のFPを戻す
                             users_col.update_one({"_id": client_doc_id}, {"$inc": {"fp": ref_amt}})
                             new_fp = users_col.find_one({"_id": client_doc_id}).get("fp", 0)
                             await websocket.send(json.dumps({"type": "sync", "fp": new_fp}))
@@ -248,26 +239,36 @@ async def timer_loop():
                 
         await asyncio.sleep(1)
 
-# ▼ Renderの厳しい審査を絶対に通過する無敵のヘルスチェック関数
-def health_check(*args, **kwargs):
-    import http
-    path = "/"
+# ▼ HTTPとWebSocketを自動で仕分けする完全版ヘルスチェック関数
+async def health_check(*args, **kwargs):
+    is_ws = False
+    
+    # 接続リクエストの中に「これはWebSocketです」という合図(Upgradeヘッダー)があるか確認
     for arg in args:
-        if hasattr(arg, 'path'): path = arg.path
-        elif isinstance(arg, str): path = arg
-            
-    if path == "/" or path == "/health":
+        if hasattr(arg, 'headers'):
+            if 'Upgrade' in arg.headers or 'upgrade' in arg.headers:
+                is_ws = True
+        elif hasattr(arg, 'get'):
+            if arg.get('Upgrade') or arg.get('upgrade'):
+                is_ws = True
+                
+    # 合図がない（Renderの死活監視ロボットからのアクセス）場合は「200 OK」を返す
+    if not is_ws:
+        import http
         try:
             import websockets.http11
-            return websockets.http11.Response(200, "OK", [], b"OK\n")
+            return websockets.http11.Response(200, "OK", [("Content-Type", "text/plain")], b"OK\n")
         except Exception:
-            return http.HTTPStatus.OK, [], b"OK\n"
+            return http.HTTPStatus.OK, [("Content-Type", "text/plain")], b"OK\n"
+            
+    # 合図がある（ゲームからの本当の通信）場合は、Noneを返してそのままWebSocketとして繋ぐ
     return None
 
 async def main():
     port = int(os.environ.get("PORT", 10000))
+    # process_request=health_check を復活させ、Renderの監視を突破します
     server = await websockets.serve(handler, "0.0.0.0", port, process_request=health_check)
-    print(f"🚀 WebSocketサーバー起動！ ポート:{port}")
+    print(f"🚀 WebSocketサーバー起動！ ポート:{port}", flush=True)
     await asyncio.gather(server.wait_closed(), timer_loop())
 
 if __name__ == "__main__":
