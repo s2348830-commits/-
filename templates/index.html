@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>おみくじBot FPステータス</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+</head>
+<body>
+    <main class="container">
+        <h1>🎋 おみくじBot ユーザーページ</h1>
+        
+        {% if not logged_in %}
+            <article>
+                <p>自分のFP（ポイント）を確認するには、Discordアカウントでログインしてください。</p>
+                <a href="/login" role="button">Discordでログイン</a>
+            </article>
+        {% else %}
+            <article>
+                <header style="display: flex; align-items: center; gap: 1rem;">
+                    <img src="{{ avatar_url }}" alt="アバター" style="width: 50px; border-radius: 50%;">
+                    <h2>{{ username }} さんのステータス</h2>
+                </header>
+                
+                <h3>総所持 FP: <strong>{{ total_fp }}</strong> FP</h3>
+                <hr>
+                
+                <h4>参加サーバー別のFP</h4>
+                {% if servers|length > 0 %}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>サーバーID (Guild ID)</th>
+                                <th>所持FP</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for server in servers %}
+                            <tr>
+                                <td>{{ server.guild_id }}</td>
+                                <td><strong>{{ server.fp }}</strong> FP</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p>まだFPを獲得していません。Botで遊んでみましょう！</p>
+                {% endif %}
+                
+                <footer>
+                    <a href="/logout" class="secondary" role="button">ログアウト</a>
+                </footer>
+            </article>
+        {% endif %}
+    </main>
+</body>
+</html>
