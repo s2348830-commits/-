@@ -5,13 +5,15 @@ import random
 import urllib.request
 import urllib.parse
 import os
+import http
 import pymongo
 import logging
 
-# 不要なログを非表示
+# ログの設定
 logging.getLogger("websockets.server").setLevel(logging.CRITICAL)
 logging.getLogger("websockets.http11").setLevel(logging.CRITICAL)
 
+# Discord Webhook URL
 WEBHOOK_URL = "https://discord.com/api/webhooks/1483775041148817480/6k7PEYZjNfO9Xik7HWroEzW0BLTP3jp3zzot7kJe00ZpdUkQPGipThBxtsY2gkseqYsK"
 
 # ==========================================
@@ -29,6 +31,7 @@ if MONGO_URL:
     try:
         mongo_client = pymongo.MongoClient(MONGO_URL)
         db = mongo_client["race_game_db"]
+        # ボットと同じコレクション名を使用
         users_col = db["discord_users"]
         print("✅ MongoDBへの接続に成功しました！")
     except Exception as e:
@@ -59,7 +62,6 @@ def generate_race_data():
     names = ["レッドフェラーリ", "ブルーポルシェ", "イエローマクラーレン", "グリーンスープラ", "シルバーGTR"]
     colors = ["white", "black", "red", "blue", "yellow"]
     texts = ["black", "white", "white", "white", "black"]
-    
     for i in range(5):
         pop = popularities[i]
         win_odds = round(random.uniform(1.8, 4.8) * volatility, 1) if pop == 1 else \
@@ -87,7 +89,6 @@ def process_race_results():
     random.shuffle(results)
     r = results[:5]
     discord_msg = f"🏁 **第{race_count}回 レース結果発表！** 🏁\n🥇:{r[0]}番 🥈:{r[1]}番 🥉:{r[2]}番\n\n 👤**プレイヤーのBET結果**👤 \n"
-    
     for bet in current_bets:
         doc_id = bet["doc_id"]
         user_id = bet["user_id"]
@@ -150,8 +151,6 @@ async def handler(websocket):
             elif data["action"] == "login":
                 u_id, g_id = str(data["user_id"]), str(data.get("guild_id", "DM"))
                 client_doc_id = f"{g_id}_{u_id}"
-                
-                # 接続オブジェクトにIDを記憶（レース結果配布時の個別通知用）
                 websocket.doc_id = client_doc_id  
                 user_fp = 10000
                 
@@ -176,7 +175,9 @@ async def handler(websocket):
                 if MONGO_URL:
                     user_doc = users_col.find_one({"_id": client_doc_id})
                     curr_fp = user_doc.get("fp", 0) if user_doc else 0
-                    if curr_fp < amt: continue
+                    if curr_fp < amt:
+                        print(f"[{client_doc_id}] 残高不足です")
+                        continue
                     
                     users_col.update_one({"_id": client_doc_id}, {"$inc": {"fp": -amt}})
                     current_bets.append({
@@ -217,7 +218,6 @@ async def timer_loop():
         
         if connected_clients:
             if state_changed_to_result:
-                # 結果発表時のみ、最新の所持金をDBから個別に取得して送信
                 for ws in connected_clients:
                     try:
                         msg_dict = {
@@ -243,10 +243,25 @@ async def timer_loop():
                 
         await asyncio.sleep(1)
 
+# ▼ Renderの厳しい審査を絶対に通過する無敵のヘルスチェック関数
+def health_check(*args, **kwargs):
+    import http
+    path = "/"
+    for arg in args:
+        if hasattr(arg, 'path'): path = arg.path
+        elif isinstance(arg, str): path = arg
+            
+    if path == "/" or path == "/health":
+        try:
+            import websockets.http11
+            return websockets.http11.Response(200, "OK", [], b"OK\n")
+        except Exception:
+            return http.HTTPStatus.OK, [], b"OK\n"
+    return None
+
 async def main():
     port = int(os.environ.get("PORT", 10000))
-    # Renderのヘルスチェックを最も確実に通過する設定（関数指定なし）
-    server = await websockets.serve(handler, "0.0.0.0", port)
+    server = await websockets.serve(handler, "0.0.0.0", port, process_request=health_check)
     print(f"🚀 WebSocketサーバー起動！ ポート:{port}")
     await asyncio.gather(server.wait_closed(), timer_loop())
 
